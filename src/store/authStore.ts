@@ -28,16 +28,29 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signIn: async (email, password) => {
     set({ loading: true })
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    console.log('signIn response:', { data, error })
     set({ loading: false })
-    return { error: error?.message ?? null }
+    if (error) {
+      const msg = typeof error.message === 'string' ? error.message : JSON.stringify(error)
+      return { error: msg }
+    }
+    return { error: null }
   },
 
   signUp: async (email, password) => {
     set({ loading: true })
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    console.log('signUp response:', { data, error })
     set({ loading: false })
-    return { error: error?.message ?? null }
+    if (error) {
+      const msg = typeof error.message === 'string' ? error.message : JSON.stringify(error)
+      return { error: msg }
+    }
+    if (data?.user && !data.session) {
+      return { error: 'Check your email for a confirmation link to complete signup.' }
+    }
+    return { error: null }
   },
 
   signOut: async () => {
