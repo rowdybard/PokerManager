@@ -111,11 +111,11 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
         <CardHeader><CardTitle>League Info</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Name</label>
+            <label className="text-sm font-medium text-muted">Name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Description</label>
+            <label className="text-sm font-medium text-muted">Description</label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
         </CardContent>
@@ -125,24 +125,24 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
       <Card>
         <CardHeader>
           <CardTitle>Points System</CardTitle>
-          <p className="text-sm text-gray-400">Set points for each finishing position</p>
+          <p className="text-sm text-muted">Set points for each finishing position</p>
         </CardHeader>
         <CardContent className="space-y-2">
           {Object.entries(pointsSystem.positionPoints ?? {})
             .sort(([a], [b]) => Number(a) - Number(b))
             .map(([position, points]) => (
               <div key={position} className="flex items-center gap-2">
-                <span className="w-16 text-sm text-gray-400">Position {position}</span>
+                <span className="w-16 text-sm text-muted">Position {position}</span>
                 <Input
                   type="number"
                   value={points}
                   onChange={(e) => updatePositionPoints(position, Number(e.target.value))}
                   className="w-24"
                 />
-                <span className="text-sm text-gray-500">pts</span>
+                <span className="text-sm text-muted">pts</span>
                 <button
                   onClick={() => removePosition(position)}
-                  className="ml-auto text-gray-600 hover:text-red-400"
+                  className="ml-auto text-muted hover:text-danger"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -150,7 +150,7 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
             ))}
           <div className="space-y-2 pt-2">
             <div className="flex items-center gap-2">
-              <span className="w-16 text-sm text-gray-400">Participation</span>
+              <span className="w-16 text-sm text-muted">Participation</span>
               <Input
                 type="number"
                 value={pointsSystem.participationPoints ?? 0}
@@ -159,7 +159,7 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
                 }
                 className="w-24"
               />
-              <span className="text-sm text-gray-500">pts (non-cashers)</span>
+              <span className="text-sm text-muted">pts (non-cashers)</span>
             </div>
           </div>
           <Button size="sm" variant="secondary" onClick={addPosition}>
@@ -181,25 +181,25 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           {members.length === 0 ? (
-            <p className="text-sm text-gray-400">No members yet</p>
+            <p className="text-sm text-muted">No members yet</p>
           ) : (
             members.map((m) => (
               <div key={m.user_id} className="flex items-center gap-2">
-                <Crown className={`h-4 w-4 ${m.role === 'owner' ? 'text-gold' : 'text-gray-600'}`} />
-                <span className="flex-1 text-sm text-white">{m.role}</span>
+                <Crown className={`h-4 w-4 ${m.role === 'owner' ? 'text-gold' : 'text-border'}`} />
+                <span className="flex-1 text-sm text-ink">{m.role}</span>
                 {m.role !== 'owner' && (
                   <>
                     <select
                       value={m.role}
                       onChange={(e) => updateMemberRole(m.user_id, e.target.value)}
-                      className="rounded border border-border bg-card px-2 py-1 text-xs text-white"
+                      className="rounded border border-border bg-white px-2 py-1 text-xs text-ink"
                     >
                       <option value="member">Member</option>
                       <option value="admin">Admin</option>
                     </select>
                     <button
                       onClick={() => removeMember(m.user_id)}
-                      className="text-gray-600 hover:text-red-400"
+                      className="text-muted hover:text-danger"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -218,12 +218,12 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
           <Save className="mr-1 h-4 w-4" />
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
-        {saved && <span className="text-sm text-green-400">Saved!</span>}
+        {saved && <span className="text-sm text-success">Saved!</span>}
       </div>
 
       {/* Danger zone */}
-      <Card className="border-red-900/50">
-        <CardHeader><CardTitle className="text-red-400">Danger Zone</CardTitle></CardHeader>
+      <Card className="border-danger/30">
+        <CardHeader><CardTitle className="text-danger">Danger Zone</CardTitle></CardHeader>
         <CardContent>
           <Button variant="danger" size="sm" onClick={deleteLeague}>
             <Trash2 className="mr-1 h-4 w-4" />

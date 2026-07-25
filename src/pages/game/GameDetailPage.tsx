@@ -99,8 +99,8 @@ export function GameDetailPage() {
     setGame({ ...game!,status })
   }
 
-  if (loading) return <div className="text-center text-gray-400 py-8">Loading...</div>
-  if (!game) return <div className="text-center text-gray-400 py-8">Game not found</div>
+  if (loading) return <div className="text-center text-muted py-12">Loading...</div>
+  if (!game) return <div className="text-center text-muted py-12">Game not found</div>
 
   const rsvpCounts = {
     confirmed: invites.filter((i) => i.rsvp_status === 'confirmed').length,
@@ -111,7 +111,7 @@ export function GameDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to={`/leagues/${leagueId}`} className="flex items-center gap-1 text-sm text-gray-400 hover:text-white">
+      <Link to={`/leagues/${leagueId}`} className="flex items-center gap-1 text-sm text-muted hover:text-ink">
         <ArrowLeft className="h-4 w-4" />
         Back to league
       </Link>
@@ -120,10 +120,10 @@ export function GameDetailPage() {
       <Card>
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">{formatDateTime(game.scheduled_date)}</h1>
-            {game.location && <p className="text-sm text-gray-400 mt-1">{game.location}</p>}
-            {game.notes && <p className="text-sm text-gray-400 mt-1">{game.notes}</p>}
-            <p className="text-sm text-gray-400 mt-1">Buy-in: {formatCurrency(Number(game.buy_in))}</p>
+            <h1 className="text-xl font-bold text-ink">{formatDateTime(game.scheduled_date)}</h1>
+            {game.location && <p className="text-sm text-muted mt-1">{game.location}</p>}
+            {game.notes && <p className="text-sm text-muted mt-1">{game.notes}</p>}
+            <p className="text-sm text-muted mt-1">Buy-in: {formatCurrency(Number(game.buy_in))}</p>
           </div>
           <Badge variant={game.status === 'completed' ? 'green' : game.status === 'scheduled' ? 'gold' : 'default'}>
             {game.status.replace('_', ' ')}
@@ -143,24 +143,24 @@ export function GameDetailPage() {
           <CardHeader><CardTitle className="text-base">RSVPs</CardTitle></CardHeader>
           <CardContent>
             <div className="mb-3 flex gap-3 text-sm">
-              <span className="text-green-400">{rsvpCounts.confirmed} confirmed</span>
-              <span className="text-yellow-400">{rsvpCounts.maybe} maybe</span>
-              <span className="text-red-400">{rsvpCounts.declined} declined</span>
-              <span className="text-gray-400">{rsvpCounts.pending} pending</span>
+              <span className="text-success">{rsvpCounts.confirmed} confirmed</span>
+              <span className="text-gold">{rsvpCounts.maybe} maybe</span>
+              <span className="text-danger">{rsvpCounts.declined} declined</span>
+              <span className="text-muted">{rsvpCounts.pending} pending</span>
             </div>
             <div className="space-y-1.5">
               {invites.map((invite) => {
                 const player = players.find((p) => p.id === invite.player_id)
                 if (!player) return null
                 const colors: Record<string, string> = {
-                  confirmed: 'text-green-400',
-                  maybe: 'text-yellow-400',
-                  declined: 'text-red-400',
-                  pending: 'text-gray-400',
+                  confirmed: 'text-success',
+                  maybe: 'text-gold',
+                  declined: 'text-danger',
+                  pending: 'text-muted',
                 }
                 return (
                   <div key={invite.id} className="flex items-center justify-between">
-                    <span className="text-sm text-white">{player.display_name}</span>
+                    <span className="text-sm text-ink">{player.display_name}</span>
                     <select
                       value={invite.rsvp_status}
                       onChange={async (e) => {
@@ -170,7 +170,7 @@ export function GameDetailPage() {
                           .eq('id', invite.id)
                         loadGameData()
                       }}
-                      className={`rounded border border-border bg-card px-2 py-1 text-xs ${colors[invite.rsvp_status]}`}
+                      className={`rounded border border-border bg-white px-2 py-1 text-xs ${colors[invite.rsvp_status]}`}
                     >
                       <option value="pending">Pending</option>
                       <option value="confirmed">Confirmed</option>
@@ -188,7 +188,7 @@ export function GameDetailPage() {
       {/* Results */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-white">Results</h2>
+          <h2 className="text-lg font-semibold text-ink">Results</h2>
           <Button size="sm" onClick={() => setShowAddResult(!showAddResult)}>
             <Plus className="mr-1 h-4 w-4" />
             Add Result
@@ -208,7 +208,7 @@ export function GameDetailPage() {
             </Select>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-gray-400">Position</label>
+                <label className="text-xs text-muted">Position</label>
                 <Input
                   type="number"
                   min={1}
@@ -217,7 +217,7 @@ export function GameDetailPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400">Buy-in</label>
+                <label className="text-xs text-muted">Buy-in</label>
                 <Input
                   type="number"
                   value={newResult.buy_in_amount}
@@ -225,7 +225,7 @@ export function GameDetailPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400">Payout</label>
+                <label className="text-xs text-muted">Payout</label>
                 <Input
                   type="number"
                   value={newResult.payout}
@@ -233,7 +233,7 @@ export function GameDetailPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400">Rebuys</label>
+                <label className="text-xs text-muted">Rebuys</label>
                 <Input
                   type="number"
                   min={0}
@@ -250,32 +250,32 @@ export function GameDetailPage() {
         )}
 
         {results.length === 0 ? (
-          <Card><p className="text-center text-sm text-gray-400 py-4">No results recorded yet</p></Card>
+          <Card><p className="text-center text-sm text-muted py-4">No results recorded yet</p></Card>
         ) : (
           <div className="space-y-2">
             {results.map((r) => {
               const player = players.find((p) => p.id === r.player_id)
               return (
                 <Card key={r.id} className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-sm font-bold text-gold">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cream text-sm font-bold text-gold">
                     {r.finish_position}
                   </div>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-poker-green text-sm font-medium text-white">
                     {getInitials(player?.display_name ?? '?')}
                   </div>
                   <div className="flex-1">
-                    <Link to={`/leagues/${leagueId}/players/${r.player_id}`} className="font-medium text-white hover:underline">
+                    <Link to={`/leagues/${leagueId}/players/${r.player_id}`} className="font-medium text-ink hover:underline">
                       {player?.display_name ?? 'Unknown'}
                     </Link>
-                    {r.rebuys > 0 && <p className="text-xs text-gray-400">{r.rebuys} rebuys</p>}
+                    {r.rebuys > 0 && <p className="text-xs text-muted">{r.rebuys} rebuys</p>}
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-gold">{r.points_earned} pts</p>
-                    <p className={`text-xs ${Number(r.payout) - Number(r.buy_in_amount) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`text-xs ${Number(r.payout) - Number(r.buy_in_amount) >= 0 ? 'text-success' : 'text-danger'}`}>
                       {formatCurrency(Number(r.payout) - Number(r.buy_in_amount))}
                     </p>
                   </div>
-                  <button onClick={() => deleteResult(r.id)} className="text-gray-600 hover:text-red-400">
+                  <button onClick={() => deleteResult(r.id)} className="text-muted hover:text-danger">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </Card>
@@ -291,7 +291,7 @@ export function GameDetailPage() {
 function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
+      className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
       {...props}
     >
       {children}

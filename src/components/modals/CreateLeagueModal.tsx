@@ -58,10 +58,10 @@ export function CreateLeagueModal({ open, onClose, onCreated }: CreateLeagueModa
     <Modal open={open} onClose={onClose} title="Create League">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
         )}
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">League Name</label>
+          <label className="text-sm font-medium text-muted">League Name</label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -70,7 +70,7 @@ export function CreateLeagueModal({ open, onClose, onCreated }: CreateLeagueModa
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Description (optional)</label>
+          <label className="text-sm font-medium text-muted">Description (optional)</label>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}

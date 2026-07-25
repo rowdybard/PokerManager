@@ -204,7 +204,7 @@ export function MockDataSeeder() {
     <Card className="border-dashed border-border">
       <div className="flex items-center gap-2 mb-3">
         <FlaskConical className="h-5 w-5 text-gold" />
-        <p className="text-base font-semibold text-white">Test Data</p>
+        <p className="text-base font-semibold text-ink">Test Data</p>
       </div>
       <div className="flex gap-3">
         <Button size="sm" variant="secondary" onClick={seedMockData} disabled={seeding || clearing}>
@@ -217,7 +217,7 @@ export function MockDataSeeder() {
         </Button>
       </div>
       {message && (
-        <p className="mt-3 text-sm text-gray-400">{message}</p>
+        <p className="mt-3 text-sm text-muted">{message}</p>
       )}
     </Card>
   )

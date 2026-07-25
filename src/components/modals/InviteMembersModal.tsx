@@ -65,14 +65,14 @@ export function InviteMembersModal({ open, onClose, leagueId, leagueName }: Invi
     <Modal open={open} onClose={onClose} title={`Invite to ${leagueName}`}>
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
         )}
         {success && (
-          <div className="rounded-lg bg-green-900/30 px-3 py-2 text-sm text-green-400">{success}</div>
+          <div className="rounded-lg bg-success/10 px-3 py-2 text-sm text-success">{success}</div>
         )}
 
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Invite by email</label>
+          <label className="text-sm font-medium text-muted">Invite by email</label>
           <div className="flex gap-2">
             <Input
               type="email"
@@ -84,11 +84,11 @@ export function InviteMembersModal({ open, onClose, leagueId, leagueName }: Invi
               Invite
             </Button>
           </div>
-          <p className="text-xs text-gray-500">If they have an account, they'll be added automatically.</p>
+          <p className="text-xs text-muted">If they have an account, they'll be added automatically.</p>
         </div>
 
         <div className="border-t border-border pt-4">
-          <label className="text-sm text-gray-400">Or share league link</label>
+          <label className="text-sm font-medium text-muted">Or share league link</label>
           <div className="mt-1.5 flex gap-2">
             <Input value={inviteUrl} readOnly className="text-xs" />
             <Button variant="secondary" onClick={copyLink}>

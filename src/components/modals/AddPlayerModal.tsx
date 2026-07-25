@@ -47,10 +47,10 @@ export function AddPlayerModal({ open, onClose, leagueId, onCreated }: AddPlayer
     <Modal open={open} onClose={onClose} title="Add Player">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
         )}
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Player Name</label>
+          <label className="text-sm font-medium text-muted">Player Name</label>
           <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}

@@ -102,12 +102,12 @@ export function PlayerProfilePage() {
     setLoading(false)
   }
 
-  if (loading) return <div className="text-center text-gray-400 py-8">Loading...</div>
-  if (!player) return <div className="text-center text-gray-400 py-8">Player not found</div>
+  if (loading) return <div className="text-center text-muted py-12">Loading...</div>
+  if (!player) return <div className="text-center text-muted py-12">Player not found</div>
 
   return (
     <div className="space-y-4">
-      <Link to={`/leagues/${leagueId}`} className="flex items-center gap-1 text-sm text-gray-400 hover:text-white">
+      <Link to={`/leagues/${leagueId}`} className="flex items-center gap-1 text-sm text-muted hover:text-ink">
         <ArrowLeft className="h-4 w-4" />
         Back to league
       </Link>
@@ -118,8 +118,8 @@ export function PlayerProfilePage() {
           {getInitials(player.display_name)}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">{player.display_name}</h1>
-          {stats && <p className="text-sm text-gray-400">{stats.gamesPlayed} games played</p>}
+          <h1 className="text-xl font-bold text-ink">{player.display_name}</h1>
+          {stats && <p className="text-sm text-muted">{stats.gamesPlayed} games played</p>}
         </div>
       </Card>
 
@@ -131,11 +131,11 @@ export function PlayerProfilePage() {
             label="Net Profit"
             value={formatCurrency(stats.netProfit)}
             icon={stats.netProfit >= 0 ? TrendingUp : TrendingDown}
-            color={stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}
+            color={stats.netProfit >= 0 ? 'text-success' : 'text-danger'}
           />
-          <StatCard label="Wins" value={String(stats.wins)} icon={Trophy} color="text-white" />
-          <StatCard label="Win Rate" value={`${stats.winRate.toFixed(0)}%`} icon={Target} color="text-white" />
-          <StatCard label="Avg Finish" value={stats.averageFinish.toFixed(1)} icon={Target} color="text-white" />
+          <StatCard label="Wins" value={String(stats.wins)} icon={Trophy} color="text-ink" />
+          <StatCard label="Win Rate" value={`${stats.winRate.toFixed(0)}%`} icon={Target} color="text-ink" />
+          <StatCard label="Avg Finish" value={stats.averageFinish.toFixed(1)} icon={Target} color="text-ink" />
           <StatCard label="Best Finish" value={String(stats.bestFinish)} icon={Trophy} color="text-gold" />
         </div>
       )}
@@ -147,14 +147,14 @@ export function PlayerProfilePage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={pointsHistory}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                <XAxis dataKey="game" tick={{ fill: '#888', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#888', fontSize: 10 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2ddd0" />
+                <XAxis dataKey="game" tick={{ fill: '#8a8578', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#8a8578', fontSize: 10 }} />
                 <Tooltip
-                  contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px' }}
-                  labelStyle={{ color: '#888' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e2ddd0', borderRadius: '8px' }}
+                  labelStyle={{ color: '#8a8578' }}
                 />
-                <Line type="monotone" dataKey="cumulative" stroke="#d4af37" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="cumulative" stroke="#b8941f" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -168,14 +168,14 @@ export function PlayerProfilePage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={winningsHistory}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                <XAxis dataKey="game" tick={{ fill: '#888', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#888', fontSize: 10 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2ddd0" />
+                <XAxis dataKey="game" tick={{ fill: '#8a8578', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#8a8578', fontSize: 10 }} />
                 <Tooltip
-                  contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px' }}
-                  labelStyle={{ color: '#888' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e2ddd0', borderRadius: '8px' }}
+                  labelStyle={{ color: '#8a8578' }}
                 />
-                <Bar dataKey="profit" fill="#0f5132" />
+                <Bar dataKey="profit" fill="#1a6b4c" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -185,20 +185,20 @@ export function PlayerProfilePage() {
       {/* Game history */}
       {results.length > 0 && (
         <div>
-          <h2 className="mb-2 text-lg font-semibold text-white">Game History</h2>
+          <h2 className="mb-2 text-lg font-semibold text-ink">Game History</h2>
           <div className="space-y-2">
             {results.map((r) => (
               <Card key={r.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-sm font-bold text-gold">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cream text-sm font-bold text-gold">
                     {r.finish_position}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">{formatDate(r.games?.scheduled_date ?? r.created_at)}</p>
-                    <p className="text-xs text-gray-400">{r.points_earned} pts</p>
+                    <p className="text-sm font-medium text-ink">{formatDate(r.games?.scheduled_date ?? r.created_at)}</p>
+                    <p className="text-xs text-muted">{r.points_earned} pts</p>
                   </div>
                 </div>
-                <p className={`text-sm font-medium ${Number(r.payout) - Number(r.buy_in_amount) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <p className={`text-sm font-medium ${Number(r.payout) - Number(r.buy_in_amount) >= 0 ? 'text-success' : 'text-danger'}`}>
                   {formatCurrency(Number(r.payout) - Number(r.buy_in_amount))}
                 </p>
               </Card>
@@ -212,10 +212,10 @@ export function PlayerProfilePage() {
 
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: string; icon: typeof Trophy; color: string }) {
   return (
-    <Card className="flex flex-col items-center justify-center py-3">
-      <Icon className={`mb-1 h-5 w-5 ${color}`} />
-      <p className="text-lg font-bold text-white">{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
+    <Card className="flex flex-col items-center justify-center py-4">
+      <Icon className={`mb-1.5 h-5 w-5 ${color}`} />
+      <p className="text-lg font-bold text-ink">{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </Card>
   )
 }

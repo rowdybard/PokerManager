@@ -31,12 +31,12 @@ export function LoginPage() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">
+            <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
               {error}
             </div>
           )}
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Email</label>
+            <label className="text-sm font-medium text-muted">Email</label>
             <Input
               type="email"
               value={email}
@@ -46,7 +46,7 @@ export function LoginPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Password</label>
+            <label className="text-sm font-medium text-muted">Password</label>
             <Input
               type="password"
               value={password}
@@ -59,9 +59,9 @@ export function LoginPage() {
             {loading ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-400">
+        <p className="mt-5 text-center text-sm text-muted">
           No account?{' '}
-          <Link to="/signup" className="text-gold hover:underline font-medium">
+          <Link to="/signup" className="text-gold hover:underline font-semibold">
             Sign up
           </Link>
         </p>

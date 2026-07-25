@@ -54,10 +54,10 @@ export function CreateSeasonModal({ open, onClose, leagueId, onCreated }: Create
     <Modal open={open} onClose={onClose} title="New Season">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
         )}
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Season Name</label>
+          <label className="text-sm font-medium text-muted">Season Name</label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -67,11 +67,11 @@ export function CreateSeasonModal({ open, onClose, leagueId, onCreated }: Create
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Start Date</label>
+            <label className="text-sm font-medium text-muted">Start Date</label>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">End Date</label>
+            <label className="text-sm font-medium text-muted">End Date</label>
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>

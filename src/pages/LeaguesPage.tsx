@@ -35,12 +35,12 @@ export function LeaguesPage() {
     load()
   }, [user])
 
-  if (loading) return <div className="text-center text-gray-400 py-8">Loading...</div>
+  if (loading) return <div className="text-center text-muted py-12">Loading...</div>
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Leagues</h1>
+        <h1 className="text-2xl font-bold text-ink">Leagues</h1>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="mr-1 h-4 w-4" />
           New
@@ -49,9 +49,9 @@ export function LeaguesPage() {
 
       {leagues.length === 0 ? (
         <Card>
-          <div className="text-center py-6">
-            <Users className="mx-auto mb-2 h-8 w-8 text-gray-600" />
-            <p className="text-sm text-gray-400 mb-3">No leagues yet. Create one to get started!</p>
+          <div className="text-center py-8">
+            <Users className="mx-auto mb-3 h-10 w-10 text-border" />
+            <p className="text-sm text-muted mb-4">No leagues yet. Create one to get started!</p>
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="mr-1 h-4 w-4" />
               Create League
@@ -67,8 +67,8 @@ export function LeaguesPage() {
                   <Trophy className="h-5 w-5 text-gold" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-white">{league.name}</p>
-                  {league.description && <p className="text-sm text-gray-400 mt-0.5">{league.description}</p>}
+                  <p className="font-medium text-ink">{league.name}</p>
+                  {league.description && <p className="text-sm text-muted mt-0.5">{league.description}</p>}
                 </div>
               </Card>
             </Link>

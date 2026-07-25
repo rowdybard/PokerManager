@@ -126,8 +126,8 @@ export function LeagueDetailPage() {
     setStandings(sorted)
   }
 
-  if (loading) return <div className="text-center text-gray-400 py-8">Loading...</div>
-  if (!league) return <div className="text-center text-gray-400 py-8">League not found</div>
+  if (loading) return <div className="text-center text-muted py-12">Loading...</div>
+  if (!league) return <div className="text-center text-muted py-12">League not found</div>
 
   const tabs: { key: Tab; label: string; icon: typeof Trophy }[] = [
     { key: 'standings', label: 'Standings', icon: Trophy },
@@ -140,8 +140,8 @@ export function LeagueDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">{league.name}</h1>
-        {league.description && <p className="text-sm text-gray-400 mt-1">{league.description}</p>}
+        <h1 className="text-2xl font-bold text-ink">{league.name}</h1>
+        {league.description && <p className="text-sm text-muted mt-1">{league.description}</p>}
       </div>
 
       {/* Season selector */}
@@ -158,7 +158,7 @@ export function LeagueDetailPage() {
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                   activeSeason?.id === s.id
                     ? 'bg-poker-green text-white'
-                    : 'bg-card text-gray-400 hover:text-white'
+                    : 'bg-cream text-muted hover:text-ink'
                 }`}
               >
                 {s.name}
@@ -179,8 +179,8 @@ export function LeagueDetailPage() {
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === t.key
-                ? 'border-gold text-white'
-                : 'border-transparent text-gray-400 hover:text-white'
+                ? 'border-gold text-ink'
+                : 'border-transparent text-muted hover:text-ink'
             }`}
           >
             <t.icon className="h-4 w-4" />
@@ -193,24 +193,24 @@ export function LeagueDetailPage() {
       {tab === 'standings' && (
         <div className="space-y-2">
           {standings.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No completed games yet</p></Card>
+            <Card><p className="text-center text-sm text-muted py-4">No completed games yet</p></Card>
           ) : (
             standings.map((s) => (
               <Link key={s.playerId} to={`/leagues/${leagueId}/players/${s.playerId}`}>
                 <Card className="flex items-center gap-3 hover:border-gold/50 transition-colors cursor-pointer">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-sm font-bold text-gold">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cream text-sm font-bold text-gold">
                     {s.rank}
                   </div>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-poker-green text-sm font-medium text-white">
                     {getInitials(s.displayName)}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-white">{s.displayName}</p>
-                    <p className="text-xs text-gray-400">{s.gamesPlayed} games · {s.wins} wins</p>
+                    <p className="font-medium text-ink">{s.displayName}</p>
+                    <p className="text-xs text-muted">{s.gamesPlayed} games · {s.wins} wins</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-gold">{s.totalPoints} pts</p>
-                    <p className={`text-xs font-medium ${s.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`text-xs font-medium ${s.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
                       {formatCurrency(s.netProfit)}
                     </p>
                   </div>
@@ -228,14 +228,14 @@ export function LeagueDetailPage() {
             Schedule Game
           </Button>
           {games.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No games yet</p></Card>
+            <Card><p className="text-center text-sm text-muted py-4">No games yet</p></Card>
           ) : (
             games.map((g) => (
               <Link key={g.id} to={`/leagues/${leagueId}/games/${g.id}`}>
                 <Card className="flex items-center justify-between hover:border-gold/50 transition-colors cursor-pointer">
                   <div>
-                    <p className="font-medium text-white">{formatDate(g.scheduled_date)}</p>
-                    {g.location && <p className="text-xs text-gray-400 mt-0.5">{g.location}</p>}
+                    <p className="font-medium text-ink">{formatDate(g.scheduled_date)}</p>
+                    {g.location && <p className="text-xs text-muted mt-0.5">{g.location}</p>}
                   </div>
                   <Badge variant={g.status === 'completed' ? 'green' : g.status === 'scheduled' ? 'gold' : 'default'}>
                     {g.status.replace('_', ' ')}
@@ -254,7 +254,7 @@ export function LeagueDetailPage() {
             Add Player
           </Button>
           {players.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No players yet</p></Card>
+            <Card><p className="text-center text-sm text-muted py-4">No players yet</p></Card>
           ) : (
             players.map((p) => (
               <Link key={p.id} to={`/leagues/${leagueId}/players/${p.id}`}>
@@ -262,7 +262,7 @@ export function LeagueDetailPage() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-poker-green text-sm font-medium text-white">
                     {getInitials(p.display_name)}
                   </div>
-                  <p className="font-medium text-white">{p.display_name}</p>
+                  <p className="font-medium text-ink">{p.display_name}</p>
                 </Card>
               </Link>
             ))

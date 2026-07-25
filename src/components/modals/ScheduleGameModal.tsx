@@ -84,10 +84,10 @@ export function ScheduleGameModal({
     <Modal open={open} onClose={onClose} title="Schedule Game">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">{error}</div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
         )}
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Date & Time</label>
+          <label className="text-sm font-medium text-muted">Date & Time</label>
           <Input
             type="datetime-local"
             value={scheduledDate}
@@ -97,7 +97,7 @@ export function ScheduleGameModal({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Buy-in ($)</label>
+            <label className="text-sm font-medium text-muted">Buy-in ($)</label>
             <Input
               type="number"
               min={0}
@@ -106,7 +106,7 @@ export function ScheduleGameModal({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Location</label>
+            <label className="text-sm font-medium text-muted">Location</label>
             <Input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
@@ -115,7 +115,7 @@ export function ScheduleGameModal({
           </div>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm text-gray-400">Notes (optional)</label>
+          <label className="text-sm font-medium text-muted">Notes (optional)</label>
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -124,12 +124,12 @@ export function ScheduleGameModal({
         </div>
         {players.length > 0 && (
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Invite Players ({invitePlayerIds.length} selected)</label>
+            <label className="text-sm font-medium text-muted">Invite Players ({invitePlayerIds.length} selected)</label>
             <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-border p-2">
               {players.map((p) => (
                 <label
                   key={p.id}
-                  className="flex items-center gap-2 rounded px-2 py-1 hover:bg-bg cursor-pointer"
+                  className="flex items-center gap-2 rounded px-2 py-1 hover:bg-cream cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -137,7 +137,7 @@ export function ScheduleGameModal({
                     onChange={() => togglePlayer(p.id)}
                     className="accent-gold"
                   />
-                  <span className="text-sm text-white">{p.display_name}</span>
+                  <span className="text-sm text-ink">{p.display_name}</span>
                 </label>
               ))}
             </div>

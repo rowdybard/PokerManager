@@ -59,13 +59,13 @@ export function DashboardPage() {
   }, [user])
 
   if (loading) {
-    return <div className="text-center text-gray-400 py-8">Loading...</div>
+    return <div className="text-center text-muted py-12">Loading...</div>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-ink">Dashboard</h1>
         <Button size="sm" onClick={() => setShowCreateLeague(true)}>
           <Plus className="mr-1 h-4 w-4" />
           New League
@@ -74,13 +74,13 @@ export function DashboardPage() {
 
       {/* Upcoming games */}
       <div>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
           <Calendar className="h-5 w-5 text-gold" />
           Upcoming Games
         </h2>
         {upcomingGames.length === 0 ? (
           <Card>
-            <p className="text-center text-sm text-gray-400 py-4">No upcoming games scheduled</p>
+            <p className="text-center text-sm text-muted py-4">No upcoming games scheduled</p>
           </Card>
         ) : (
           <div className="space-y-2">
@@ -89,8 +89,8 @@ export function DashboardPage() {
                 <Card className="hover:border-gold/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-white">{game.league_name}</p>
-                      <p className="text-sm text-gray-400 mt-0.5">{formatDate(game.scheduled_date)}</p>
+                      <p className="font-medium text-ink">{game.league_name}</p>
+                      <p className="text-sm text-muted mt-0.5">{formatDate(game.scheduled_date)}</p>
                     </div>
                     {game.location && (
                       <Badge variant="default">{game.location}</Badge>
@@ -105,15 +105,15 @@ export function DashboardPage() {
 
       {/* Leagues */}
       <div>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
           <Trophy className="h-5 w-5 text-gold" />
           Your Leagues
         </h2>
         {leagues.length === 0 ? (
           <Card>
-            <div className="text-center py-6">
-              <Users className="mx-auto mb-2 h-8 w-8 text-gray-600" />
-              <p className="text-sm text-gray-400 mb-3">No leagues yet. Create one to get started!</p>
+            <div className="text-center py-8">
+              <Users className="mx-auto mb-3 h-10 w-10 text-border" />
+              <p className="text-sm text-muted mb-4">No leagues yet. Create one to get started!</p>
               <Button size="sm" onClick={() => setShowCreateLeague(true)}>
                 <Plus className="mr-1 h-4 w-4" />
                 Create League
@@ -127,12 +127,12 @@ export function DashboardPage() {
                 <Card className="hover:border-gold/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-white">{league.name}</p>
+                      <p className="font-medium text-ink">{league.name}</p>
                       {league.description && (
-                        <p className="text-sm text-gray-400 mt-0.5">{league.description}</p>
+                        <p className="text-sm text-muted mt-0.5">{league.description}</p>
                       )}
                     </div>
-                    <Trophy className="h-5 w-5 text-gray-600" />
+                    <Trophy className="h-5 w-5 text-border" />
                   </div>
                 </Card>
               </Link>
