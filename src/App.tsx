@@ -6,6 +6,8 @@ import { AuthLayout } from './components/layout/AuthLayout'
 import { LoginPage } from './pages/auth/LoginPage'
 import { SignUpPage } from './pages/auth/SignUpPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { LeaguesPage } from './pages/LeaguesPage'
+import { GamesPage } from './pages/GamesPage'
 import { LeagueDetailPage } from './pages/league/LeagueDetailPage'
 import { GameDetailPage } from './pages/game/GameDetailPage'
 import { PlayerProfilePage } from './pages/player/PlayerProfilePage'
@@ -37,6 +39,8 @@ function App() {
         {/* App routes (protected) */}
         <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/leagues" element={<LeaguesPage />} />
+          <Route path="/games" element={<GamesPage />} />
           <Route path="/leagues/:leagueId" element={<LeagueDetailPage />} />
           <Route path="/leagues/:leagueId/games/:gameId" element={<GameDetailPage />} />
           <Route path="/leagues/:leagueId/players/:playerId" element={<PlayerProfilePage />} />

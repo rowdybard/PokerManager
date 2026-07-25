@@ -10,8 +10,8 @@ export function AppLayout() {
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
-    { icon: Trophy, label: 'Leagues', path: '/' },
-    { icon: Calendar, label: 'Games', path: '/' },
+    { icon: Trophy, label: 'Leagues', path: '/leagues' },
+    { icon: Calendar, label: 'Games', path: '/games' },
   ]
 
   const handleSignOut = async () => {
