@@ -32,13 +32,12 @@ export function MockDataSeeder() {
         participationPoints: 1,
       }
 
-      // Create league
+      // Create league (owner_id defaults to auth.uid() via DB)
       const { data: league, error: leagueErr } = await supabase
         .from('leagues')
         .insert({
           name: 'Thursday Night Poker',
           description: 'Weekly cash game with the boys',
-          owner_id: user.id,
           points_system: pointsSystem,
         })
         .select()
@@ -46,10 +45,7 @@ export function MockDataSeeder() {
 
       if (leagueErr) throw leagueErr
 
-      // Add self as owner member
-      await supabase
-        .from('league_members')
-        .insert({ league_id: league.id, user_id: user.id, role: 'owner' })
+      // Owner membership row is auto-created by DB trigger
 
       // Create season
       const { data: season, error: seasonErr } = await supabase

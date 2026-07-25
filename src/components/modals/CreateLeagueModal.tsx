@@ -31,7 +31,6 @@ export function CreateLeagueModal({ open, onClose, onCreated }: CreateLeagueModa
       .insert({
         name,
         description: description || null,
-        owner_id: user.id,
         points_system: DEFAULT_POINTS_SYSTEM,
       })
       .select()
@@ -42,10 +41,6 @@ export function CreateLeagueModal({ open, onClose, onCreated }: CreateLeagueModa
       setLoading(false)
       return
     }
-
-    await supabase
-      .from('league_members')
-      .insert({ league_id: data.id, user_id: user.id, role: 'owner' })
 
     await supabase
       .from('seasons')
