@@ -137,11 +137,11 @@ export function LeagueDetailPage() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">{league.name}</h1>
-        {league.description && <p className="text-sm text-gray-400 mt-1">{league.description}</p>}
+        <h1 className="text-3xl font-bold text-white">{league.name}</h1>
+        {league.description && <p className="text-base text-gray-400 mt-1">{league.description}</p>}
       </div>
 
       {/* Season selector */}
@@ -155,7 +155,7 @@ export function LeagueDetailPage() {
                   setActiveSeason(s)
                   setTab('standings')
                 }}
-                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                className={`whitespace-nowrap rounded-xl px-4 py-2 text-base font-medium transition-colors ${
                   activeSeason?.id === s.id
                     ? 'bg-poker-green text-white'
                     : 'bg-card text-gray-400 hover:text-white'
@@ -172,18 +172,18 @@ export function LeagueDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-2 border-b border-border">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors ${
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-3 text-base font-medium transition-colors ${
               tab === t.key
                 ? 'border-gold text-white'
                 : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            <t.icon className="h-4 w-4" />
+            <t.icon className="h-5 w-5" />
             {t.label}
           </button>
         ))}
@@ -191,26 +191,26 @@ export function LeagueDetailPage() {
 
       {/* Tab content */}
       {tab === 'standings' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {standings.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No completed games yet</p></Card>
+            <Card><p className="text-center text-base text-gray-400 py-6">No completed games yet</p></Card>
           ) : (
             standings.map((s) => (
               <Link key={s.playerId} to={`/leagues/${leagueId}/players/${s.playerId}`}>
-                <Card className="flex items-center gap-3 hover:border-gold/50 transition-colors cursor-pointer">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-sm font-bold text-gold">
+                <Card className="flex items-center gap-4 hover:border-gold/50 transition-colors cursor-pointer">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-lg font-bold text-gold">
                     {s.rank}
                   </div>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-poker-green text-sm font-medium text-white">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-poker-green text-base font-semibold text-white">
                     {getInitials(s.displayName)}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-white">{s.displayName}</p>
-                    <p className="text-xs text-gray-400">{s.gamesPlayed} games · {s.wins} wins</p>
+                    <p className="text-lg font-semibold text-white">{s.displayName}</p>
+                    <p className="text-sm text-gray-400">{s.gamesPlayed} games · {s.wins} wins</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-gold">{s.totalPoints} pts</p>
-                    <p className={`text-xs ${s.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className="text-lg font-bold text-gold">{s.totalPoints} pts</p>
+                    <p className={`text-sm font-medium ${s.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                       {formatCurrency(s.netProfit)}
                     </p>
                   </div>
@@ -222,20 +222,20 @@ export function LeagueDetailPage() {
       )}
 
       {tab === 'games' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Button size="sm" className="mb-2" onClick={() => setShowScheduleGame(true)}>
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1.5 h-5 w-5" />
             Schedule Game
           </Button>
           {games.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No games yet</p></Card>
+            <Card><p className="text-center text-base text-gray-400 py-6">No games yet</p></Card>
           ) : (
             games.map((g) => (
               <Link key={g.id} to={`/leagues/${leagueId}/games/${g.id}`}>
                 <Card className="flex items-center justify-between hover:border-gold/50 transition-colors cursor-pointer">
                   <div>
-                    <p className="font-medium text-white">{formatDate(g.scheduled_date)}</p>
-                    {g.location && <p className="text-xs text-gray-400">{g.location}</p>}
+                    <p className="text-lg font-semibold text-white">{formatDate(g.scheduled_date)}</p>
+                    {g.location && <p className="text-sm text-gray-400 mt-0.5">{g.location}</p>}
                   </div>
                   <Badge variant={g.status === 'completed' ? 'green' : g.status === 'scheduled' ? 'gold' : 'default'}>
                     {g.status.replace('_', ' ')}
@@ -248,21 +248,21 @@ export function LeagueDetailPage() {
       )}
 
       {tab === 'players' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Button size="sm" className="mb-2" onClick={() => setShowAddPlayer(true)}>
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1.5 h-5 w-5" />
             Add Player
           </Button>
           {players.length === 0 ? (
-            <Card><p className="text-center text-sm text-gray-400 py-4">No players yet</p></Card>
+            <Card><p className="text-center text-base text-gray-400 py-6">No players yet</p></Card>
           ) : (
             players.map((p) => (
               <Link key={p.id} to={`/leagues/${leagueId}/players/${p.id}`}>
-                <Card className="flex items-center gap-3 hover:border-gold/50 transition-colors cursor-pointer">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-poker-green text-sm font-medium text-white">
+                <Card className="flex items-center gap-4 hover:border-gold/50 transition-colors cursor-pointer">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-poker-green text-base font-semibold text-white">
                     {getInitials(p.display_name)}
                   </div>
-                  <p className="font-medium text-white">{p.display_name}</p>
+                  <p className="text-lg font-semibold text-white">{p.display_name}</p>
                 </Card>
               </Link>
             ))

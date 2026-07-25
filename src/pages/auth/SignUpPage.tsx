@@ -29,14 +29,14 @@ export function SignUpPage() {
         <CardTitle>Create account</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">
+            <div className="rounded-xl bg-red-900/30 px-4 py-3 text-base text-red-400">
               {error}
             </div>
           )}
-          <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Email</label>
+          <div className="space-y-2">
+            <label className="text-base text-gray-400">Email</label>
             <Input
               type="email"
               value={email}
@@ -45,8 +45,8 @@ export function SignUpPage() {
               required
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm text-gray-400">Password</label>
+          <div className="space-y-2">
+            <label className="text-base text-gray-400">Password</label>
             <Input
               type="password"
               value={password}
@@ -60,9 +60,9 @@ export function SignUpPage() {
             {loading ? 'Creating...' : 'Sign up'}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-400">
+        <p className="mt-5 text-center text-base text-gray-400">
           Already have an account?{' '}
-          <Link to="/login" className="text-gold hover:underline">
+          <Link to="/login" className="text-gold hover:underline font-medium">
             Sign in
           </Link>
         </p>

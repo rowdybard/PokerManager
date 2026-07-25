@@ -17,14 +17,14 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
         className={cn(
-          'relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-border bg-card p-4',
+          'relative z-10 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-border bg-card p-6',
           'max-h-[90vh] overflow-y-auto'
         )}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <X className="h-5 w-5" />
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-white">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <X className="h-6 w-6" />
           </button>
         </div>
         {children}

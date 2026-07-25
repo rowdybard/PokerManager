@@ -47,27 +47,27 @@ export function GamesPage() {
   const past = games.filter((g) => g.status === 'completed')
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Games</h1>
+    <div className="space-y-8">
+      <h1 className="text-3xl font-bold text-white">Games</h1>
 
       <div>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
-          <Calendar className="h-5 w-5 text-gold" />
+        <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-white">
+          <Calendar className="h-6 w-6 text-gold" />
           Upcoming ({upcoming.length})
         </h2>
         {upcoming.length === 0 ? (
-          <Card><p className="text-center text-sm text-gray-400 py-4">No upcoming games</p></Card>
+          <Card><p className="text-center text-base text-gray-400 py-6">No upcoming games</p></Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {upcoming.map((g) => (
               <Link key={g.id} to={`/leagues/${g.league_id}/games/${g.id}`}>
                 <Card className="flex items-center justify-between hover:border-gold/50 transition-colors cursor-pointer">
                   <div>
-                    <p className="font-medium text-white">{g.league_name}</p>
-                    <p className="text-sm text-gray-400">{formatDate(g.scheduled_date)}</p>
+                    <p className="text-lg font-semibold text-white">{g.league_name}</p>
+                    <p className="text-base text-gray-400 mt-0.5">{formatDate(g.scheduled_date)}</p>
                     {g.location && (
-                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3" /> {g.location}
+                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                        <MapPin className="h-4 w-4" /> {g.location}
                       </p>
                     )}
                   </div>
@@ -80,17 +80,17 @@ export function GamesPage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-white">Past ({past.length})</h2>
+        <h2 className="mb-4 text-xl font-bold text-white">Past ({past.length})</h2>
         {past.length === 0 ? (
-          <Card><p className="text-center text-sm text-gray-400 py-4">No completed games yet</p></Card>
+          <Card><p className="text-center text-base text-gray-400 py-6">No completed games yet</p></Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {past.map((g) => (
               <Link key={g.id} to={`/leagues/${g.league_id}/games/${g.id}`}>
                 <Card className="flex items-center justify-between hover:border-gold/50 transition-colors cursor-pointer">
                   <div>
-                    <p className="font-medium text-white">{g.league_name}</p>
-                    <p className="text-sm text-gray-400">{formatDate(g.scheduled_date)}</p>
+                    <p className="text-lg font-semibold text-white">{g.league_name}</p>
+                    <p className="text-base text-gray-400 mt-0.5">{formatDate(g.scheduled_date)}</p>
                   </div>
                   <Badge variant="green">Completed</Badge>
                 </Card>
