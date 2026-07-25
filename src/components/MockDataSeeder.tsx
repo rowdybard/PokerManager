@@ -32,12 +32,13 @@ export function MockDataSeeder() {
         participationPoints: 1,
       }
 
-      // Create league (owner_id defaults to auth.uid() via DB)
+      // Create league (RLS requires owner_id = auth.uid())
       const { data: league, error: leagueErr } = await supabase
         .from('leagues')
         .insert({
           name: 'Thursday Night Poker',
           description: 'Weekly cash game with the boys',
+          owner_id: user.id,
           points_system: pointsSystem,
         })
         .select()
