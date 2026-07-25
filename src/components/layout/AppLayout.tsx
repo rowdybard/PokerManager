@@ -23,23 +23,23 @@ export function AppLayout() {
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Top bar */}
       <header className="sticky top-0 z-10 border-b border-border bg-bg/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <Spade className="h-6 w-6 text-gold" />
+            <Spade className="h-5 w-5 text-gold" />
             <span className="text-lg font-bold text-white">Poker Manager</span>
           </div>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-base text-gray-400 hover:text-white px-2 py-1"
+            className="flex items-center gap-1 text-sm text-gray-400 hover:text-white px-2 py-1"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 pb-24">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 pb-20">
         <Outlet />
       </main>
 
@@ -53,11 +53,11 @@ export function AppLayout() {
                 key={item.label}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-1.5 py-3.5 text-sm font-medium transition-colors',
+                  'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors',
                   isActive ? 'text-gold' : 'text-gray-500 hover:text-gray-300'
                 )}
               >
-                <item.icon className="h-6 w-6" />
+                <item.icon className="h-5 w-5" />
                 {item.label}
               </button>
             )

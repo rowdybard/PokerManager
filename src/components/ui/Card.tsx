@@ -17,13 +17,13 @@ export function Card({ className, ...props }: CardProps) {
 
 export function CardHeader({ className, ...props }: CardProps) {
   return (
-    <div className={cn('flex flex-col space-y-2 pb-5', className)} {...props} />
+    <div className={cn('flex flex-col space-y-1.5 pb-4', className)} {...props} />
   )
 }
 
 export function CardTitle({ className, ...props }: CardProps) {
   return (
-    <h3 className={cn('text-xl font-bold text-white', className)} {...props} />
+    <h3 className={cn('text-lg font-semibold text-white', className)} {...props} />
   )
 }
 
