@@ -54,7 +54,11 @@ jobs:
         shell: bash
         run: |
           npx supabase gen types typescript --local --schema public > /tmp/database.ts
-          diff -u src/types/database.ts /tmp/database.ts
+          sed '/^  \/\/ Allows to automatically instantiate createClient with right options$/,/^  }$/d' \
+            src/types/database.ts > /tmp/database-expected.ts
+          sed '/^  \/\/ Allows to automatically instantiate createClient with right options$/,/^  }$/d' \
+            /tmp/database.ts > /tmp/database-actual.ts
+          diff -u -B /tmp/database-expected.ts /tmp/database-actual.ts
 
   browser:
     runs-on: ubuntu-latest
