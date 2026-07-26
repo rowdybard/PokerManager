@@ -1,150 +1,121 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { supabase } from '../../lib/supabase'
-import type { Game, Player } from '../../types'
+import { Select } from '../ui/Select'
+import {
+  createGameFromTemplate,
+  createIdempotencyKey,
+  errorMessage,
+  type GameTemplateDetail,
+  type HomeGame,
+} from '../../lib/homeGames'
 
 interface ScheduleGameModalProps {
   open: boolean
   onClose: () => void
-  leagueId: string
-  seasonId: string
-  players: Player[]
-  onCreated: (game: Game) => void
+  templates: GameTemplateDetail[]
+  initialTemplateId?: string
+  onCreated: (game: HomeGame) => void
 }
+
+const scheduleSchema = z.object({
+  templateId: z.string().uuid('Choose a recurring game template.'),
+  scheduledDate: z.string().min(1, 'Choose a date and time.'),
+  title: z.string().trim().max(100).optional(),
+})
 
 export function ScheduleGameModal({
   open,
   onClose,
-  leagueId,
-  seasonId,
-  players,
+  templates,
+  initialTemplateId,
   onCreated,
 }: ScheduleGameModalProps) {
+  const [templateId, setTemplateId] = useState(initialTemplateId ?? templates[0]?.id ?? '')
   const [scheduledDate, setScheduledDate] = useState('')
-  const [buyIn, setBuyIn] = useState(20)
-  const [location, setLocation] = useState('')
-  const [notes, setNotes] = useState('')
-  const [invitePlayerIds, setInvitePlayerIds] = useState<string[]>([])
+  const [title, setTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const togglePlayer = (id: string) => {
-    setInvitePlayerIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    )
-  }
+  useEffect(() => {
+    if (open) setTemplateId(initialTemplateId ?? templates[0]?.id ?? '')
+  }, [initialTemplateId, open, templates])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    const { data: game, error: gameError } = await supabase
-      .from('games')
-      .insert({
-        league_id: leagueId,
-        season_id: seasonId,
-        scheduled_date: new Date(scheduledDate).toISOString(),
-        buy_in: buyIn,
-        location: location || null,
-        notes: notes || null,
-        status: 'scheduled',
-      })
-      .select()
-      .single()
-
-    if (gameError) {
-      setError(gameError.message)
-      setLoading(false)
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const parsed = scheduleSchema.safeParse({ templateId, scheduledDate, title })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Check the schedule details.')
       return
     }
-
-    if (invitePlayerIds.length > 0) {
-      const invites = invitePlayerIds.map((playerId) => ({
-        game_id: game.id,
-        player_id: playerId,
-        rsvp_status: 'pending' as const,
-      }))
-      await supabase.from('game_invites').insert(invites)
+    setLoading(true)
+    setError(null)
+    try {
+      const game = await createGameFromTemplate({
+        templateId: parsed.data.templateId,
+        scheduledDate: parsed.data.scheduledDate,
+        title: parsed.data.title,
+        idempotencyKey: createIdempotencyKey('create-game'),
+      })
+      setScheduledDate('')
+      setTitle('')
+      onCreated(game)
+      onClose()
+    } catch (submitError) {
+      setError(errorMessage(submitError, 'Could not create the game.'))
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
-    setScheduledDate('')
-    setBuyIn(20)
-    setLocation('')
-    setNotes('')
-    setInvitePlayerIds([])
-    onCreated(game)
-    onClose()
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Schedule Game">
+    <Modal open={open} onClose={onClose} title="Create Game From Template">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
-        )}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-muted">Date & Time</label>
-          <Input
-            type="datetime-local"
-            value={scheduledDate}
-            onChange={(e) => setScheduledDate(e.target.value)}
-            required
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted">Buy-in ($)</label>
-            <Input
-              type="number"
-              min={0}
-              value={buyIn}
-              onChange={(e) => setBuyIn(Number(e.target.value))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted">Location</label>
-            <Input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="My house"
-            />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-muted">Notes (optional)</label>
-          <Input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Bring snacks!"
-          />
-        </div>
-        {players.length > 0 && (
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted">Invite Players ({invitePlayerIds.length} selected)</label>
-            <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-border p-2">
-              {players.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2 rounded px-2 py-1 hover:bg-cream cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={invitePlayerIds.includes(p.id)}
-                    onChange={() => togglePlayer(p.id)}
-                    className="accent-gold"
-                  />
-                  <span className="text-sm text-ink">{p.display_name}</span>
-                </label>
-              ))}
-            </div>
+          <div className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+            {error}
           </div>
         )}
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Scheduling...' : 'Schedule Game'}
+        {templates.length === 0 ? (
+          <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 text-sm text-ink">
+            Create a recurring game template first. Templates keep stakes, capacity, invitees, and
+            tournament structure consistent.
+          </div>
+        ) : (
+          <>
+            <label className="block space-y-1.5 text-sm font-medium text-muted">
+              Template
+              <Select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} · {template.kind}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="block space-y-1.5 text-sm font-medium text-muted">
+              Date & time
+              <Input
+                type="datetime-local"
+                value={scheduledDate}
+                onChange={(event) => setScheduledDate(event.target.value)}
+                required
+              />
+            </label>
+            <label className="block space-y-1.5 text-sm font-medium text-muted">
+              Event title (optional)
+              <Input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Friday night championship"
+              />
+            </label>
+          </>
+        )}
+        <Button type="submit" disabled={loading || templates.length === 0} className="w-full">
+          {loading ? 'Creating…' : 'Create game'}
         </Button>
       </form>
     </Modal>

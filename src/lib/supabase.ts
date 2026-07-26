@@ -1,21 +1,19 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    'Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env'
-  )
-}
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '../types/database'
+import { env } from './env'
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key',
+  env.supabaseUrl,
+  env.supabaseAnonKey,
   {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
   }
 )
+
+// Legacy screens still narrow older table shapes locally. New data-access
+// modules use this generated-schema view of the same singleton client.
+export const typedSupabase = supabase as SupabaseClient<Database>

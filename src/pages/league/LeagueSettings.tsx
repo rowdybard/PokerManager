@@ -1,78 +1,136 @@
-import { useState, useEffect } from 'react'
-import { Save, Trash2, UserPlus, Crown } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Save, Trash2, UserPlus, Crown, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { InviteMembersModal } from '../../components/modals/InviteMembersModal'
-import type { League, PointsSystem, LeagueMember } from '../../types'
+import { errorMessage } from '../../lib/homeGames'
+import { useAuthStore } from '../../store/authStore'
+import type { League, PointsSystem, LeagueMember, LeagueRole } from '../../types'
 
 interface LeagueSettingsProps {
   league: League
+  canManage: boolean
+  isOwner: boolean
   onUpdated: (league: League) => void
 }
 
-export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
+export function LeagueSettings({
+  league,
+  canManage,
+  isOwner,
+  onUpdated,
+}: LeagueSettingsProps) {
+  const user = useAuthStore((state) => state.user)
+  const queryClient = useQueryClient()
   const [name, setName] = useState(league.name)
   const [description, setDescription] = useState(league.description ?? '')
-  const [pointsSystem, setPointsSystem] = useState<PointsSystem>(
-    league.points_system as PointsSystem
-  )
-  const [saving, setSaving] = useState(false)
+  const [pointsSystem, setPointsSystem] = useState<PointsSystem>(league.points_system)
   const [saved, setSaved] = useState(false)
-  const [members, setMembers] = useState<(LeagueMember & { email?: string })[]>([])
+  const [failure, setFailure] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
+  const membersKey = ['home', 'league', league.id, 'members']
+  const membersQuery = useQuery({
+    queryKey: membersKey,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_members')
+        .select('*')
+        .eq('league_id', league.id)
+        .order('joined_at')
+      if (error) throw error
+      return (data ?? []) as LeagueMember[]
+    },
+  })
 
-  useEffect(() => {
-    loadMembers()
-  }, [league.id])
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!canManage || !user) throw new Error('League owner or admin access is required.')
+      if (name.trim().length < 2) throw new Error('Enter a league name.')
 
-  async function loadMembers() {
-    const { data } = await supabase
-      .from('league_members')
-      .select('*')
-      .eq('league_id', league.id)
-    setMembers(data ?? [])
-  }
+      const scoringChanged =
+        JSON.stringify(pointsSystem) !== JSON.stringify(league.points_system)
+      let createdRuleId: string | null = null
+      if (scoringChanged) {
+        const { data: latest, error: latestError } = await supabase
+          .from('league_scoring_rules')
+          .select('version')
+          .eq('league_id', league.id)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (latestError) throw latestError
+        const { data: created, error: ruleError } = await supabase
+          .from('league_scoring_rules')
+          .insert({
+            league_id: league.id,
+            version: Number(latest?.version ?? 0) + 1,
+            name: `Scoring v${Number(latest?.version ?? 0) + 1}`,
+            config: pointsSystem,
+            created_by: user.id,
+          })
+          .select('id')
+          .single()
+        if (ruleError) throw ruleError
+        createdRuleId = created.id
+      }
+
+      const { data, error } = await supabase
+        .from('leagues')
+        .update({
+          name: name.trim(),
+          description: description.trim() || null,
+          points_system: pointsSystem,
+        })
+        .eq('id', league.id)
+        .select()
+        .single()
+      if (error) {
+        if (createdRuleId) {
+          await supabase.from('league_scoring_rules').delete().eq('id', createdRuleId)
+        }
+        throw error
+      }
+      return data as League
+    },
+    onSuccess: (updated) => {
+      setFailure(null)
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 2000)
+      onUpdated(updated)
+    },
+    onError: (mutationError) => setFailure(errorMessage(mutationError)),
+  })
 
   async function removeMember(userId: string) {
-    await supabase
-      .from('league_members')
-      .delete()
-      .eq('league_id', league.id)
-      .eq('user_id', userId)
-    loadMembers()
-  }
-
-  async function updateMemberRole(userId: string, role: string) {
-    await supabase
-      .from('league_members')
-      .update({ role })
-      .eq('league_id', league.id)
-      .eq('user_id', userId)
-    loadMembers()
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    const { data, error } = await supabase
-      .from('leagues')
-      .update({
-        name,
-        description: description || null,
-        points_system: pointsSystem,
-      })
-      .eq('id', league.id)
-      .select()
-      .single()
-
-    if (!error && data) {
-      onUpdated(data)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+    try {
+      const { error } = await supabase
+        .from('league_members')
+        .delete()
+        .eq('league_id', league.id)
+        .eq('user_id', userId)
+      if (error) throw error
+      await queryClient.invalidateQueries({ queryKey: membersKey })
+    } catch (memberError) {
+      setFailure(errorMessage(memberError))
     }
-    setSaving(false)
+  }
+
+  async function updateMemberRole(userId: string, role: LeagueRole) {
+    try {
+      const { error } = await supabase
+        .from('league_members')
+        .update({ role })
+        .eq('league_id', league.id)
+        .eq('user_id', userId)
+      if (error) throw error
+      await queryClient.invalidateQueries({ queryKey: membersKey })
+    } catch (memberError) {
+      setFailure(errorMessage(memberError))
+    }
   }
 
   function updatePositionPoints(position: string, points: number) {
@@ -88,149 +146,164 @@ export function LeagueSettings({ league, onUpdated }: LeagueSettingsProps) {
 
   function addPosition() {
     const existing = Object.keys(pointsSystem.positionPoints ?? {})
-    const nextPos = existing.length > 0 ? Math.max(...existing.map(Number)) + 1 : 1
-    updatePositionPoints(String(nextPos), 0)
+    const nextPosition = existing.length > 0 ? Math.max(...existing.map(Number)) + 1 : 1
+    updatePositionPoints(String(nextPosition), 0)
   }
 
   function removePosition(position: string) {
-    const newPoints = { ...(pointsSystem.positionPoints ?? {}) }
-    delete newPoints[position]
-    setPointsSystem({ ...pointsSystem, positionPoints: newPoints })
+    const positionPoints = { ...(pointsSystem.positionPoints ?? {}) }
+    delete positionPoints[position]
+    setPointsSystem({ ...pointsSystem, positionPoints })
   }
 
   async function deleteLeague() {
-    if (!confirm('Delete this league and all its data? This cannot be undone.')) return
-    await supabase.from('leagues').delete().eq('id', league.id)
-    window.location.href = '/'
+    if (!isOwner || !confirm('Delete this league and all its data? This cannot be undone.')) return
+    const { error } = await supabase.from('leagues').delete().eq('id', league.id)
+    if (error) {
+      setFailure(error.message)
+      return
+    }
+    window.location.assign('/')
   }
 
   return (
     <div className="space-y-4">
-      {/* Basic info */}
+      {failure && <Card className="border-danger/30 bg-danger/5 py-3 text-sm text-danger" role="alert">{failure}</Card>}
+
       <Card>
-        <CardHeader><CardTitle>League Info</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>League info</CardTitle>
+          {!canManage && <p className="text-sm text-muted">Only an owner or admin can edit league settings.</p>}
+        </CardHeader>
         <CardContent className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted">Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted">Description</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
+          <label className="block space-y-1.5 text-sm font-medium text-muted">
+            Name
+            <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!canManage} />
+          </label>
+          <label className="block space-y-1.5 text-sm font-medium text-muted">
+            Description
+            <Input value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} />
+          </label>
         </CardContent>
       </Card>
 
-      {/* Points system */}
       <Card>
         <CardHeader>
-          <CardTitle>Points System</CardTitle>
-          <p className="text-sm text-muted">Set points for each finishing position</p>
+          <CardTitle>Versioned points system</CardTitle>
+          <p className="text-sm text-muted">Saving a scoring change creates a new version. Existing finalized games stay tied to their original rules.</p>
         </CardHeader>
         <CardContent className="space-y-2">
           {Object.entries(pointsSystem.positionPoints ?? {})
-            .sort(([a], [b]) => Number(a) - Number(b))
+            .sort(([left], [right]) => Number(left) - Number(right))
             .map(([position, points]) => (
               <div key={position} className="flex items-center gap-2">
-                <span className="w-16 text-sm text-muted">Position {position}</span>
+                <span className="w-20 text-sm text-muted">Position {position}</span>
                 <Input
                   type="number"
                   value={points}
-                  onChange={(e) => updatePositionPoints(position, Number(e.target.value))}
+                  onChange={(event) => updatePositionPoints(position, Number(event.target.value))}
                   className="w-24"
+                  disabled={!canManage}
                 />
                 <span className="text-sm text-muted">pts</span>
-                <button
-                  onClick={() => removePosition(position)}
-                  className="ml-auto text-muted hover:text-danger"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    aria-label={`Remove position ${position}`}
+                    onClick={() => removePosition(position)}
+                    className="ml-auto rounded p-2 text-muted hover:bg-danger/10 hover:text-danger"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             ))}
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center gap-2">
-              <span className="w-16 text-sm text-muted">Participation</span>
-              <Input
-                type="number"
-                value={pointsSystem.participationPoints ?? 0}
-                onChange={(e) =>
-                  setPointsSystem({ ...pointsSystem, participationPoints: Number(e.target.value) })
-                }
-                className="w-24"
-              />
-              <span className="text-sm text-muted">pts (non-cashers)</span>
-            </div>
+          <div className="flex items-center gap-2 pt-2">
+            <span className="w-20 text-sm text-muted">Participation</span>
+            <Input
+              type="number"
+              value={pointsSystem.participationPoints ?? 0}
+              onChange={(event) => setPointsSystem({ ...pointsSystem, participationPoints: Number(event.target.value) })}
+              className="w-24"
+              disabled={!canManage}
+            />
+            <span className="text-sm text-muted">pts</span>
           </div>
-          <Button size="sm" variant="secondary" onClick={addPosition}>
-            Add Position
-          </Button>
+          {canManage && <Button size="sm" variant="secondary" onClick={addPosition}>Add position</Button>}
         </CardContent>
       </Card>
 
-      {/* Members */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Members</CardTitle>
-            <Button size="sm" variant="secondary" onClick={() => setShowInvite(true)}>
-              <UserPlus className="mr-1 h-4 w-4" />
-              Invite
-            </Button>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle>Members</CardTitle>
+              <p className="mt-1 text-sm text-muted">Admins can run games. Only the owner can change access.</p>
+            </div>
+            {isOwner && (
+              <Button size="sm" variant="secondary" onClick={() => setShowInvite(true)}>
+                <UserPlus className="mr-1 h-4 w-4" /> Invite
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {members.length === 0 ? (
-            <p className="text-sm text-muted">No members yet</p>
-          ) : (
-            members.map((m) => (
-              <div key={m.user_id} className="flex items-center gap-2">
-                <Crown className={`h-4 w-4 ${m.role === 'owner' ? 'text-gold' : 'text-border'}`} />
-                <span className="flex-1 text-sm text-ink">{m.role}</span>
-                {m.role !== 'owner' && (
-                  <>
-                    <select
-                      value={m.role}
-                      onChange={(e) => updateMemberRole(m.user_id, e.target.value)}
-                      className="rounded border border-border bg-white px-2 py-1 text-xs text-ink"
-                    >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <button
-                      onClick={() => removeMember(m.user_id)}
-                      className="text-muted hover:text-danger"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-                {m.role === 'owner' && <Badge variant="gold">Owner</Badge>}
-              </div>
-            ))
-          )}
+          {membersQuery.isPending ? (
+            <p className="text-sm text-muted">Loading members…</p>
+          ) : (membersQuery.data ?? []).map((member) => (
+            <div key={member.user_id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+              {member.role === 'owner' ? <Crown className="h-4 w-4 text-gold" /> : member.role === 'admin' ? <ShieldCheck className="h-4 w-4 text-poker-green" /> : <span className="h-4 w-4" />}
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">{member.user_id === user?.id ? 'You' : member.user_id}</span>
+              {member.role === 'owner' ? (
+                <Badge variant="gold">Owner</Badge>
+              ) : isOwner ? (
+                <>
+                  <select
+                    value={member.role}
+                    aria-label={`Role for ${member.user_id}`}
+                    onChange={(event) => void updateMemberRole(member.user_id, event.target.value as LeagueRole)}
+                    className="rounded border border-border bg-white px-2 py-1 text-xs text-ink"
+                  >
+                    <option value="member">Member</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={`Remove member ${member.user_id}`}
+                    onClick={() => void removeMember(member.user_id)}
+                    className="rounded p-2 text-muted hover:bg-danger/10 hover:text-danger"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <Badge>{member.role}</Badge>
+              )}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
-      {/* Save */}
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="mr-1 h-4 w-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
-        {saved && <span className="text-sm text-success">Saved!</span>}
-      </div>
-
-      {/* Danger zone */}
-      <Card className="border-danger/30">
-        <CardHeader><CardTitle className="text-danger">Danger Zone</CardTitle></CardHeader>
-        <CardContent>
-          <Button variant="danger" size="sm" onClick={deleteLeague}>
-            <Trash2 className="mr-1 h-4 w-4" />
-            Delete League
+      {canManage && (
+        <div className="flex items-center gap-3">
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            <Save className="mr-1 h-4 w-4" />
+            {saveMutation.isPending ? 'Saving…' : 'Save changes'}
           </Button>
-        </CardContent>
-      </Card>
+          {saved && <span className="text-sm font-medium text-success">Saved</span>}
+        </div>
+      )}
+
+      {isOwner && (
+        <Card className="border-danger/30">
+          <CardHeader><CardTitle className="text-danger">Danger zone</CardTitle></CardHeader>
+          <CardContent>
+            <Button variant="danger" size="sm" onClick={() => void deleteLeague()}>
+              <Trash2 className="mr-1 h-4 w-4" /> Delete league
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <InviteMembersModal
         open={showInvite}

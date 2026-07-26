@@ -1,5 +1,6 @@
--- Poker Manager: Database Schema
--- Run this in Supabase SQL Editor
+-- Local bootstrap corresponding to the first migration version already
+-- recorded on production. The later reconciliation migration hardens this
+-- historical schema to the exact production baseline before suite expansion.
 
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

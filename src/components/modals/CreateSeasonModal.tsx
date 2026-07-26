@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { supabase } from '../../lib/supabase'
+import { createSeason, errorMessage } from '../../lib/homeGames'
 import type { Season } from '../../types'
 
 interface CreateSeasonModalProps {
@@ -24,30 +24,24 @@ export function CreateSeasonModal({ open, onClose, leagueId, onCreated }: Create
     setLoading(true)
     setError(null)
 
-    const { data, error } = await supabase
-      .from('seasons')
-      .insert({
-        league_id: leagueId,
+    try {
+      const season = await createSeason({
+        leagueId,
         name,
-        start_date: startDate || null,
-        end_date: endDate || null,
-        is_active: true,
+        startDate,
+        endDate,
+        makeActive: true,
       })
-      .select()
-      .single()
-
-    if (error) {
-      setError(error.message)
+      setName('')
+      setStartDate('')
+      setEndDate('')
+      onCreated(season)
+      onClose()
+    } catch (submitError) {
+      setError(errorMessage(submitError, 'Could not create the season.'))
+    } finally {
       setLoading(false)
-      return
     }
-
-    setLoading(false)
-    setName('')
-    setStartDate('')
-    setEndDate('')
-    onCreated(data)
-    onClose()
   }
 
   return (
