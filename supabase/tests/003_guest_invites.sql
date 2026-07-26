@@ -7,6 +7,12 @@ select no_plan();
 insert into auth.users (id, email)
 values ('20000000-0000-4000-8000-000000000001', 'guest-host@example.test');
 
+select set_config(
+  'request.jwt.claim.sub',
+  '20000000-0000-4000-8000-000000000001',
+  true
+);
+
 insert into public.leagues (id, name, owner_id)
 values (
   '21000000-0000-4000-8000-000000000001',

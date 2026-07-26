@@ -19,7 +19,7 @@ the remaining clean-reset/pgTAP authority.
 
 ## Production Supabase
 
-- Fourteen local migrations exactly match the fourteen remote migrations.
+- Fifteen local migrations exactly match the fifteen remote migrations.
 - The nine historical production migrations are the canonical local baseline.
 - Existing data was preserved: 1 league, 7 games, 8 invitations, and 40 results.
 - Ten contacts and eight participants were conservatively backfilled.
