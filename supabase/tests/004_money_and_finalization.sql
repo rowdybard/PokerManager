@@ -192,6 +192,30 @@ select is(
   (-25000)::bigint,
   'reversal negates the original amount exactly'
 );
+select lives_ok(
+  $$
+    select public.reverse_ledger_entry(
+      '30000000-0000-4000-8000-000000000001',
+      (
+        select id
+        from public.bankroll_ledger_entries
+        where idempotency_key = 'ledger:test:deposit'
+      ),
+      'Duplicate funding entry',
+      'ledger:test:reversal'
+    )
+  $$,
+  'duplicate reversal submission is idempotent'
+);
+select is(
+  (
+    select count(*)::integer
+    from public.bankroll_ledger_entries
+    where idempotency_key = 'ledger:test:reversal'
+  ),
+  1,
+  'reversal idempotency stores one correction'
+);
 select throws_ok(
   $$
     update public.bankroll_ledger_entries
