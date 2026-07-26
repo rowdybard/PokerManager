@@ -14,11 +14,10 @@ export default defineConfig({
       manifest: {
         name: 'Poker Manager',
         short_name: 'PokerMgr',
-        description: 'Track points and standings for your home poker league',
+        description: 'Run home games and privately track a professional poker career',
         theme_color: '#f5f2ea',
         background_color: '#f5f2ea',
         display: 'standalone',
-        orientation: 'portrait',
         start_url: '/',
         icons: [
           {

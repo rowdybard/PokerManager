@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { useParams, Link } from 'react-router'
 import { ArrowLeft, TrendingUp, TrendingDown, Trophy, Target } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -19,12 +19,7 @@ export function PlayerProfilePage() {
   const [winningsHistory, setWinningsHistory] = useState<{ game: string; profit: number }[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!playerId) return
-    loadPlayerData()
-  }, [playerId])
-
-  async function loadPlayerData() {
+  const loadPlayerData = useCallback(async () => {
     const { data: playerData } = await supabase
       .from('players')
       .select('*')
@@ -100,7 +95,12 @@ export function PlayerProfilePage() {
     setWinningsHistory(wHistory)
 
     setLoading(false)
-  }
+  }, [leagueId, playerId])
+
+  useEffect(() => {
+    if (!playerId) return
+    void loadPlayerData()
+  }, [loadPlayerData, playerId])
 
   if (loading) return <div className="text-center text-muted py-12">Loading...</div>
   if (!player) return <div className="text-center text-muted py-12">Player not found</div>

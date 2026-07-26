@@ -1,6 +1,5 @@
--- Poker Manager: Fix RLS recursion, league insert, and owner membership
--- Safe to run against existing database
--- Run this in Supabase SQL Editor
+-- Local bootstrap continuation corresponding to the second migration version
+-- already recorded on production.
 
 -- ============================================
 -- STEP 1: Drop ALL existing policies (they have recursion bugs)

@@ -1,6 +1,24 @@
 export type GameStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
-export type RsvpStatus = 'pending' | 'confirmed' | 'declined' | 'maybe'
+export type RsvpStatus = 'pending' | 'yes' | 'maybe' | 'no' | 'waitlisted'
 export type LeagueRole = 'owner' | 'admin' | 'member'
+export type GameKind = 'cash' | 'tournament'
+export type GamePhase =
+  | 'draft'
+  | 'inviting'
+  | 'registration'
+  | 'in_progress'
+  | 'closing'
+  | 'finalized'
+  | 'cancelled'
+export type GuestRsvpStatus = RsvpStatus
+export type SettlementStatus = 'pending' | 'paid' | 'disputed' | 'void'
+export type ISO4217Code = string
+export type CareerSessionKind = 'cash' | 'tournament'
+
+export interface Money {
+  amountMinor: string
+  currency: ISO4217Code
+}
 
 export interface League {
   id: string
@@ -63,15 +81,21 @@ export interface GameResult {
   points_earned: number
   rebuys: number
   created_at: string
+  total_buy_in_minor?: string | null
+  payout_minor?: string | null
+  data_quality?: 'trusted' | 'legacy_incomplete'
 }
 
 export interface GameInvite {
   id: string
   game_id: string
-  player_id: string
+  player_id: string | null
+  contact_id?: string | null
   rsvp_status: RsvpStatus
   responded_at: string | null
   created_at: string
+  guest_count?: number
+  waitlist_position?: number | null
 }
 
 export interface LeagueMember {

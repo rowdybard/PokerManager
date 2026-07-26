@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "strict": true
+  },
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.110.8",
+    "jose": "npm:jose@6.2.4",
+    "svix": "npm:svix@1.99.1"
+  }
+}

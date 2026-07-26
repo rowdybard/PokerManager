@@ -20,6 +20,8 @@ export function MockDataSeeder() {
   const [clearing, setClearing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
+  if (!import.meta.env.DEV) return null
+
   async function seedMockData() {
     if (!user) return
     setSeeding(true)

@@ -1,0 +1,3 @@
+-- Production migration history marker.
+-- Its resulting schema is reconciled idempotently by the professional-suite
+-- migration after all nine historical versions have been registered locally.
