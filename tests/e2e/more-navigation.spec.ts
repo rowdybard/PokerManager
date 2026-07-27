@@ -31,7 +31,9 @@ test('More menu navigates to Study and Reconciliation destinations', async ({ pa
   await stubApplication(page)
   await page.goto('/')
 
-  const moreButton = page.getByRole('button', { name: 'More' })
+  const moreButton = page
+    .getByRole('navigation', { name: 'Mobile navigation' })
+    .getByRole('button', { name: 'More' })
   await moreButton.click()
   const moreDialog = page.getByRole('dialog', { name: 'More' })
   await expect(moreDialog).toBeVisible()
@@ -48,6 +50,55 @@ test('More menu navigates to Study and Reconciliation destinations', async ({ pa
   await expect(page).toHaveURL(/\/pro\/reconciliation$/)
   await expect(page.getByRole('heading', { name: 'Bank reconciliation' })).toBeVisible()
   await expect(page.getByText('Plaid disabled')).toBeVisible()
+})
+
+test.describe('desktop More menu', () => {
+  test.use({ viewport: { width: 1440, height: 900 } })
+
+  test('reaches the same destinations from the desktop header', async ({ page }) => {
+    await stubApplication(page)
+    await page.goto('/')
+
+    const moreButton = page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('button', { name: 'More' })
+    await expect(moreButton).toBeVisible()
+    await moreButton.click()
+
+    const moreDialog = page.getByRole('dialog', { name: 'More' })
+    await expect(moreDialog).toBeVisible()
+    await moreDialog.getByRole('link', { name: 'Study' }).click()
+
+    await expect(page).toHaveURL(/\/pro\/study$/)
+    await expect(page.getByRole('heading', { name: 'Hands & study' })).toBeVisible()
+    await expect(moreDialog).not.toBeVisible()
+    await expect(moreButton).toHaveAttribute('aria-expanded', 'false')
+
+    await moreButton.click()
+    await page
+      .getByRole('dialog', { name: 'More' })
+      .getByRole('link', { name: 'Reconciliation' })
+      .click()
+
+    await expect(page).toHaveURL(/\/pro\/reconciliation$/)
+    await expect(page.getByRole('heading', { name: 'Bank reconciliation' })).toBeVisible()
+  })
+
+  test('exposes Games and Bankroll, which have no desktop header link', async ({ page }) => {
+    await stubApplication(page)
+    await page.goto('/')
+
+    const moreButton = page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('button', { name: 'More' })
+    await moreButton.click()
+    await page
+      .getByRole('dialog', { name: 'More' })
+      .getByRole('link', { name: 'Bankroll' })
+      .click()
+
+    await expect(page).toHaveURL(/\/pro\/bankroll$/)
+  })
 })
 
 test('hand review mutations serialize per row and recover after an error', async ({ page }) => {

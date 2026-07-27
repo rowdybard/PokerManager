@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 import { z } from 'zod'
@@ -46,8 +46,10 @@ import {
   issueSecureInvite,
   linkFinalizedGameToCareer,
   loadGameWorkspace,
+  orderParticipantsStably,
   recordGameTransaction,
   recordTournamentFinish,
+  RSVP_GROUP_ORDER,
   setParticipantCheckIn,
   summarizeCloseout,
   transitionGamePhase,
@@ -495,12 +497,12 @@ function RosterPanel({
   const [playerId, setPlayerId] = useState('')
   const invitedPlayerIds = new Set(workspace.participants.map((participant) => participant.player_id))
   const availablePlayers = workspace.players.filter((player) => !invitedPlayerIds.has(player.id))
-  const statusOrder: HomeRsvpStatus[] = ['yes', 'maybe', 'pending', 'waitlisted', 'no']
-  const sorted = [...workspace.participants].sort(
-    (left, right) =>
-      statusOrder.indexOf(left.rsvp_status) - statusOrder.indexOf(right.rsvp_status) ||
-      left.display_name.localeCompare(right.display_name),
-  )
+  const displayOrder = useRef<string[] | null>(null)
+  const sorted = useMemo(() => {
+    const ordered = orderParticipantsStably(workspace.participants, displayOrder.current)
+    displayOrder.current = ordered.map((participant) => participant.id)
+    return ordered
+  }, [workspace.participants])
 
   async function changeCheckIn(participant: HomeParticipant) {
     const checkedIn = !participant.checked_in_at
@@ -535,7 +537,7 @@ function RosterPanel({
     }
   }
 
-  const counts = statusOrder.map((status) => ({
+  const counts = RSVP_GROUP_ORDER.map((status) => ({
     status,
     count: workspace.participants.filter((participant) => participant.rsvp_status === status).length,
   }))
@@ -606,7 +608,7 @@ function RosterPanel({
                     {participant.rsvp_status}
                   </Badge>
                 )}
-                {!readOnly && participant.rsvp_status !== 'no' && participant.rsvp_status !== 'waitlisted' && (
+                {!readOnly && (
                   <Button
                     size="sm"
                     variant={participant.checked_in_at ? 'secondary' : 'primary'}
@@ -800,16 +802,37 @@ function SeatingPanel({
   onFailure: (message: string | null) => void
 }) {
   const [values, setValues] = useState<Record<string, { table: string; seat: string }>>({})
-  const seatByParticipant = new Map(workspace.seats.filter((seat) => seat.active).map((seat) => [seat.participant_id, seat]))
+  const activeSeats = workspace.seats.filter((seat) => seat.active)
+  const seatByParticipant = new Map(activeSeats.map((seat) => [seat.participant_id, seat]))
   const eligible = workspace.participants.filter(
     (participant) => participant.checked_in_at || participant.rsvp_status === 'yes',
   )
+  const capacity = workspace.game.capacity
+  const defaultTable = 1
+  const suggestedSeats = new Map<string, number>()
+  const claimedSeats = new Set(
+    activeSeats
+      .filter((seat) => seat.table_number === defaultTable)
+      .map((seat) => seat.seat_number),
+  )
+  let nextSeat = 1
+  for (const participant of eligible) {
+    if (seatByParticipant.has(participant.id)) continue
+    while (claimedSeats.has(nextSeat) && (capacity === null || nextSeat < capacity)) {
+      nextSeat += 1
+    }
+    suggestedSeats.set(participant.id, nextSeat)
+    claimedSeats.add(nextSeat)
+    if (capacity === null || nextSeat < capacity) nextSeat += 1
+  }
 
   async function save(participant: HomeParticipant) {
     const current = seatByParticipant.get(participant.id)
     const next = values[participant.id]
-    const tableNumber = Number(next?.table ?? current?.table_number ?? 1)
-    const seatNumber = Number(next?.seat ?? current?.seat_number ?? 1)
+    const tableNumber = Number(next?.table ?? current?.table_number ?? defaultTable)
+    const seatNumber = Number(
+      next?.seat ?? current?.seat_number ?? suggestedSeats.get(participant.id) ?? 1,
+    )
     try {
       await assignSeat({ gameId: workspace.game.id, participantId: participant.id, tableNumber, seatNumber })
       await onRefresh()
@@ -841,10 +864,10 @@ function SeatingPanel({
                         className="mt-1 h-9 px-2"
                         type="number"
                         min={1}
-                        value={values[participant.id]?.table ?? current?.table_number ?? 1}
+                        value={values[participant.id]?.table ?? current?.table_number ?? defaultTable}
                         onChange={(event) => setValues((prior) => ({
                           ...prior,
-                          [participant.id]: { table: event.target.value, seat: prior[participant.id]?.seat ?? String(current?.seat_number ?? 1) },
+                          [participant.id]: { table: event.target.value, seat: prior[participant.id]?.seat ?? String(current?.seat_number ?? suggestedSeats.get(participant.id) ?? 1) },
                         }))}
                       />
                     </label>
@@ -854,10 +877,10 @@ function SeatingPanel({
                         className="mt-1 h-9 px-2"
                         type="number"
                         min={1}
-                        value={values[participant.id]?.seat ?? current?.seat_number ?? 1}
+                        value={values[participant.id]?.seat ?? current?.seat_number ?? suggestedSeats.get(participant.id) ?? 1}
                         onChange={(event) => setValues((prior) => ({
                           ...prior,
-                          [participant.id]: { table: prior[participant.id]?.table ?? String(current?.table_number ?? 1), seat: event.target.value },
+                          [participant.id]: { table: prior[participant.id]?.table ?? String(current?.table_number ?? defaultTable), seat: event.target.value },
                         }))}
                       />
                     </label>

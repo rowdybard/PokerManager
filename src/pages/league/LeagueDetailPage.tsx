@@ -707,6 +707,8 @@ function TemplatesPanel({
     structureId: '',
     structureName: 'Standard tournament',
     startingStack: '10000',
+    tableSize: '9',
+    numTables: '1',
     levelPlan: '25/50/0/20\n50/100/0/20\n75/150/25/20\nbreak/10\n100/200/25/20\n150/300/50/20\n200/400/50/20',
     payoutRules: '{"1":0.5,"2":0.3,"3":0.2}',
     reminders: '24,2',
@@ -730,6 +732,16 @@ function TemplatesPanel({
   const contacts = contactsQuery.data ?? []
   const structures = structuresQuery.data ?? []
   const groups = groupsQuery.data ?? []
+
+  function tableCount(value: string, label: string): number | null {
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const parsed = Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error(`${label} must be a positive whole number.`)
+    }
+    return parsed
+  }
 
   function dollars(value: string, label: string): string {
     try {
@@ -834,6 +846,8 @@ function TemplatesPanel({
         payoutRules,
         reminderSchedule,
         structureId,
+        tableSize: form.kind === 'tournament' ? tableCount(form.tableSize, 'Seats per table') : null,
+        numTables: form.kind === 'tournament' ? tableCount(form.numTables, 'Number of tables') : null,
         contactIds: selectedContacts,
         groupIds: selectedGroups,
       })
@@ -886,6 +900,8 @@ function TemplatesPanel({
                 <>
                   <TemplateField label="Entry fee ($)" type="number" min="0" step="0.01" value={form.entryFee} onChange={(value) => setForm({ ...form, entryFee: value })} />
                   <TemplateField label="Bounty ($)" type="number" min="0" step="0.01" value={form.bounty} onChange={(value) => setForm({ ...form, bounty: value })} />
+                  <TemplateField label="Seats per table" type="number" min="1" step="1" value={form.tableSize} onChange={(value) => setForm({ ...form, tableSize: value })} />
+                  <TemplateField label="Number of tables" type="number" min="1" step="1" value={form.numTables} onChange={(value) => setForm({ ...form, numTables: value })} />
                   <label className="text-sm font-medium text-muted">
                     Existing structure
                     <Select className="mt-1" value={form.structureId} onChange={(event) => setForm({ ...form, structureId: event.target.value })}>
@@ -986,6 +1002,9 @@ function TemplatesPanel({
                   <p className="mt-1 text-sm text-muted">
                     {formatMoney(money(template.buy_in_minor, template.currency))}
                     {template.capacity ? ` · ${template.capacity} seats` : ' · open capacity'}
+                    {template.num_tables && template.table_size
+                      ? ` · ${template.num_tables} × ${template.table_size}-handed`
+                      : ''}
                   </p>
                   {template.recurrence_rule && <p className="mt-1 text-xs text-muted">{template.recurrence_rule}</p>}
                   <p className="mt-1 text-xs text-muted">

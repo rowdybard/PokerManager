@@ -233,6 +233,8 @@ export interface GameTemplate {
   payout_rules: Json
   reminder_schedule: Json
   structure_id: string | null
+  table_size: number | null
+  num_tables: number | null
   is_archived: boolean
   created_at: string
   updated_at: string
@@ -293,6 +295,8 @@ export interface CreateGameTemplateInput {
   payoutRules?: Json
   reminderSchedule?: Json
   structureId?: string | null
+  tableSize?: number | null
+  numTables?: number | null
   contactIds?: string[]
   groupIds?: string[]
 }
@@ -316,6 +320,8 @@ export interface UpdateGameTemplateInput {
   payoutRules?: Json
   reminderSchedule?: Json
   structureId?: string | null
+  tableSize?: number | null
+  numTables?: number | null
 }
 
 export interface RecordTransactionInput {
@@ -434,8 +440,63 @@ function validateCapacity(value: number | null | undefined): number | null {
   return value
 }
 
+function validateTableCount(
+  value: number | null | undefined,
+  label: string
+): number | null {
+  if (value === null || value === undefined) return null
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${label} must be a positive whole number.`)
+  }
+  return value
+}
+
 function uniqueIds(ids: string[] | undefined): string[] {
   return [...new Set((ids ?? []).map((id) => id.trim()).filter(Boolean))]
+}
+
+export const RSVP_GROUP_ORDER: HomeRsvpStatus[] = [
+  'yes',
+  'maybe',
+  'pending',
+  'waitlisted',
+  'no',
+]
+
+/**
+ * Groups participants by RSVP status, then by name, but only on the first pass.
+ * Afterwards the established order is preserved so that changing a player's
+ * RSVP does not make their row jump to a different position while the host is
+ * still working through the roster. Newly invited players are appended.
+ */
+export function orderParticipantsStably(
+  participants: HomeParticipant[],
+  previousOrder: string[] | null
+): HomeParticipant[] {
+  const byId = new Map(
+    participants.map((participant) => [participant.id, participant] as const)
+  )
+
+  if (previousOrder === null) {
+    return [...participants].sort(
+      (left, right) =>
+        RSVP_GROUP_ORDER.indexOf(left.rsvp_status) -
+          RSVP_GROUP_ORDER.indexOf(right.rsvp_status) ||
+        left.display_name.localeCompare(right.display_name)
+    )
+  }
+
+  const retained = previousOrder.filter((id) => byId.has(id))
+  const retainedIds = new Set(retained)
+  const added = participants
+    .filter((participant) => !retainedIds.has(participant.id))
+    .sort((left, right) => left.display_name.localeCompare(right.display_name))
+    .map((participant) => participant.id)
+
+  return [...retained, ...added].flatMap((id) => {
+    const participant = byId.get(id)
+    return participant ? [participant] : []
+  })
 }
 
 export function asContact(value: unknown): Contact {
@@ -485,6 +546,8 @@ export function asGameTemplate(value: unknown): GameTemplate {
     payout_rules: (row.payout_rules ?? {}) as Json,
     reminder_schedule: (row.reminder_schedule ?? []) as Json,
     structure_id: stringOrNull(row.structure_id),
+    table_size: numberOrNull(row.table_size),
+    num_tables: numberOrNull(row.num_tables),
     is_archived: Boolean(row.is_archived),
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
@@ -1096,6 +1159,8 @@ function createGameTemplatePayload(
     payout_rules: input.payoutRules ?? {},
     reminder_schedule: input.reminderSchedule ?? [],
     structure_id: input.structureId ?? null,
+    table_size: validateTableCount(input.tableSize, 'Seats per table'),
+    num_tables: validateTableCount(input.numTables, 'Number of tables'),
   }
 }
 
@@ -1211,6 +1276,12 @@ export async function updateGameTemplate(
     payload.reminder_schedule = changes.reminderSchedule
   }
   if (changes.structureId !== undefined) payload.structure_id = changes.structureId
+  if (changes.tableSize !== undefined) {
+    payload.table_size = validateTableCount(changes.tableSize, 'Seats per table')
+  }
+  if (changes.numTables !== undefined) {
+    payload.num_tables = validateTableCount(changes.numTables, 'Number of tables')
+  }
 
   if (Object.keys(payload).length === 0) return loadGameTemplate(templateId)
   const { data, error } = await db

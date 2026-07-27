@@ -108,6 +108,20 @@ export function AppLayout() {
                 </Link>
               )
             })}
+            <button
+              type="button"
+              onClick={() => setMoreOpen(true)}
+              aria-expanded={moreOpen}
+              aria-haspopup="dialog"
+              className={cn(
+                'nav-link relative flex min-h-12 items-center gap-1.5 border-x border-transparent px-2.5 text-sm font-medium text-ivory/80 hover:bg-ivory/8 hover:text-white xl:px-3',
+                moreIsActive &&
+                  'border-gold-leaf/20 bg-felt-deep text-gold-leaf after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-gold-leaf',
+              )}
+            >
+              <DotsThree className="size-4" weight="bold" aria-hidden="true" />
+              More
+            </button>
           </nav>
 
           <button

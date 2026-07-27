@@ -28,6 +28,7 @@ export function GameResultsScoreSheet({
       render: (result) => <RankMedallion rank={result.finish_position} />,
       align: 'center',
       numeric: true,
+      mobile: 'leading',
       className: 'w-20',
     },
     {

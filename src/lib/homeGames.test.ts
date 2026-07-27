@@ -22,9 +22,98 @@ import {
   createLeague,
   formatMinorUnits,
   normalizeRsvp,
+  orderParticipantsStably,
   setParticipantCheckIn,
   summarizeCloseout,
+  type HomeParticipant,
+  type HomeRsvpStatus,
 } from './homeGames'
+
+function participant(
+  id: string,
+  display_name: string,
+  rsvp_status: HomeRsvpStatus,
+): HomeParticipant {
+  return {
+    id,
+    game_id: 'game-1',
+    player_id: `player-${id}`,
+    display_name,
+    rsvp_status,
+    checked_in_at: null,
+    guest_count: 0,
+    table_number: null,
+    seat_number: null,
+  }
+}
+
+describe('roster ordering', () => {
+  it('groups by RSVP status then name on the first pass', () => {
+    const roster = [
+      participant('1', 'Zoe', 'no'),
+      participant('2', 'Adam', 'pending'),
+      participant('3', 'Blake', 'yes'),
+      participant('4', 'Alice', 'yes'),
+      participant('5', 'Cara', 'waitlisted'),
+      participant('6', 'Dana', 'maybe'),
+    ]
+
+    expect(
+      orderParticipantsStably(roster, null).map((entry) => entry.display_name),
+    ).toEqual(['Alice', 'Blake', 'Dana', 'Adam', 'Cara', 'Zoe'])
+  })
+
+  it('keeps a participant in place when their RSVP changes', () => {
+    const roster = [
+      participant('1', 'Alice', 'yes'),
+      participant('2', 'Blake', 'yes'),
+      participant('3', 'Cara', 'pending'),
+    ]
+    const firstPass = orderParticipantsStably(roster, null)
+    const order = firstPass.map((entry) => entry.id)
+    expect(order).toEqual(['1', '2', '3'])
+
+    // Blake declines: previously this moved him to the bottom of the list.
+    const updated = roster.map((entry) =>
+      entry.id === '2' ? { ...entry, rsvp_status: 'no' as HomeRsvpStatus } : entry,
+    )
+
+    const secondPass = orderParticipantsStably(updated, order)
+    expect(secondPass.map((entry) => entry.id)).toEqual(['1', '2', '3'])
+    expect(secondPass[1]?.rsvp_status).toBe('no')
+  })
+
+  it('is idempotent when re-run against its own output order', () => {
+    const roster = [
+      participant('1', 'Alice', 'pending'),
+      participant('2', 'Blake', 'yes'),
+    ]
+    const first = orderParticipantsStably(roster, null)
+    const order = first.map((entry) => entry.id)
+    const second = orderParticipantsStably(roster, order)
+
+    expect(second.map((entry) => entry.id)).toEqual(order)
+  })
+
+  it('appends newly invited players and drops removed ones', () => {
+    const order = ['1', '2']
+    const roster = [
+      participant('2', 'Blake', 'yes'),
+      participant('3', 'New Player', 'pending'),
+      participant('1', 'Alice', 'yes'),
+    ]
+
+    expect(
+      orderParticipantsStably(roster, order).map((entry) => entry.id),
+    ).toEqual(['1', '2', '3'])
+
+    expect(
+      orderParticipantsStably([participant('3', 'New Player', 'pending')], order).map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(['3'])
+  })
+})
 
 describe('home-game normalization helpers', () => {
   it('uses the canonical RSVP states while reading legacy values safely', () => {

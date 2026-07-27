@@ -9,7 +9,7 @@ export interface ScoreTableColumn<Row> {
   align?: 'start' | 'center' | 'end'
   numeric?: boolean
   rowHeader?: boolean
-  mobile?: 'show' | 'primary' | 'hide'
+  mobile?: 'show' | 'primary' | 'leading' | 'hide'
   className?: string
 }
 
@@ -103,52 +103,60 @@ export function ScoreTable<Row>({
             visibleColumns.find((column) => column.mobile === 'primary') ??
             visibleColumns.find((column) => column.rowHeader) ??
             visibleColumns[0]
-          const detailColumns = visibleColumns.filter((column) => column !== primaryColumn)
+          const leadingColumn = visibleColumns.find(
+            (column) => column.mobile === 'leading' && column !== primaryColumn,
+          )
+          const detailColumns = visibleColumns.filter(
+            (column) => column !== primaryColumn && column !== leadingColumn,
+          )
 
           return (
             <div
               key={getRowKey(row, rowIndex)}
               role="listitem"
               aria-label={getRowLabel?.(row, rowIndex)}
-              className="px-3 py-3"
+              className="px-3 py-3.5"
             >
-              <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                {leadingColumn ? (
+                  <div className="shrink-0">{leadingColumn.render(row, rowIndex)}</div>
+                ) : null}
                 {primaryColumn ? (
-                  <div className="col-span-2 min-w-0">
-                    <dt className="sr-only">{primaryColumn.label ?? primaryColumn.header}</dt>
-                    <dd
-                      className={cn(
-                        'min-w-0 font-serif text-lg font-semibold text-ink',
-                        primaryColumn.numeric && 'tnum',
-                        alignmentClass(primaryColumn.align),
-                        primaryColumn.className,
-                      )}
-                    >
-                      {primaryColumn.render(row, rowIndex)}
-                    </dd>
+                  <div
+                    className={cn(
+                      'min-w-0 flex-1 font-serif text-lg font-semibold text-ink',
+                      primaryColumn.numeric && 'tnum',
+                    )}
+                  >
+                    {primaryColumn.render(row, rowIndex)}
                   </div>
                 ) : null}
-                {detailColumns.map((column) => (
-                  <div
-                    key={column.key}
-                    className={cn('min-w-0', column.align === 'end' && 'text-right')}
-                  >
-                    <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.07em] text-muted">
-                      {column.label ?? column.header}
-                    </dt>
-                    <dd
-                      className={cn(
-                        'mt-0.5 text-sm font-medium text-ink',
-                        column.numeric && 'tnum',
-                        alignmentClass(column.align),
-                        column.className,
-                      )}
-                    >
-                      {column.render(row, rowIndex)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              </div>
+              {detailColumns.length > 0 ? (
+                <dl className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 min-[420px]:grid-cols-4">
+                  {detailColumns.map((column) => (
+                    <div key={column.key} className="min-w-0">
+                      <dt
+                        className={cn(
+                          'text-xs font-semibold uppercase tracking-[0.06em] text-muted',
+                          alignmentClass(column.align),
+                        )}
+                      >
+                        {column.label ?? column.header}
+                      </dt>
+                      <dd
+                        className={cn(
+                          'mt-0.5 text-base font-semibold text-ink',
+                          column.numeric && 'tnum',
+                          alignmentClass(column.align),
+                        )}
+                      >
+                        {column.render(row, rowIndex)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
             </div>
           )
         })}

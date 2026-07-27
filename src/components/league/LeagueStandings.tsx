@@ -24,6 +24,7 @@ export function LeagueStandings({
       render: (standing) => <RankMedallion rank={standing.rank} />,
       align: 'center',
       numeric: true,
+      mobile: 'leading',
       className: 'w-20',
     },
     {
