@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowDownRight, ArrowUpRight, Plus, RotateCcw, WalletCards, X } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -65,9 +65,14 @@ export function BankrollPage() {
   })
   const [reverseTarget, setReverseTarget] = useState<LedgerEntry | null>(null)
   const [reverseReason, setReverseReason] = useState('')
+  const mutationKeys = useRef(new Map<string, string>())
 
   const accountsById = useMemo(
     () => new Map((resource.data?.accounts ?? []).map((item) => [item.id, item])),
+    [resource.data?.accounts],
+  )
+  const activeAccounts = useMemo(
+    () => (resource.data?.accounts ?? []).filter((item) => !item.is_archived),
     [resource.data?.accounts],
   )
 
@@ -102,6 +107,10 @@ export function BankrollPage() {
       setFeedback({ error: 'Choose a bankroll account.' })
       return
     }
+    if (selectedAccount.is_archived) {
+      setFeedback({ error: 'Choose an active bankroll account.' })
+      return
+    }
     setSubmitting(true)
     setFeedback({})
     try {
@@ -113,16 +122,33 @@ export function BankrollPage() {
         amountMinor = -amountMinor
       }
       if (amountMinor === 0n) throw new Error('Ledger amount cannot be zero.')
+      const occurredAt = new Date(entry.occurredAt).toISOString()
+      const description = entry.description.trim()
+      const externalReference = entry.reference.trim() || null
+      const fingerprint = JSON.stringify([
+        'ledger-entry',
+        ownerId,
+        selectedAccount.id,
+        entry.type,
+        amountMinor.toString(),
+        selectedAccount.currency,
+        occurredAt,
+        description,
+        externalReference,
+      ])
+      const idempotencyKey = mutationKeys.current.get(fingerprint) ?? crypto.randomUUID()
+      mutationKeys.current.set(fingerprint, idempotencyKey)
       await postLedgerEntry(ownerId, {
         account_id: selectedAccount.id,
         entry_type: entry.type,
         amount_minor: amountMinor.toString(),
         currency: selectedAccount.currency,
-        occurred_at: new Date(entry.occurredAt).toISOString(),
-        description: entry.description.trim(),
-        external_reference: entry.reference.trim() || null,
-        idempotency_key: crypto.randomUUID(),
+        occurred_at: occurredAt,
+        description,
+        external_reference: externalReference,
+        idempotency_key: idempotencyKey,
       })
+      mutationKeys.current.delete(fingerprint)
       setEntry({
         accountId: selectedAccount.id,
         type: 'deposit',
@@ -147,7 +173,17 @@ export function BankrollPage() {
     setSubmitting(true)
     setFeedback({})
     try {
-      await reverseLedgerEntry(ownerId, reverseTarget.id, reverseReason.trim())
+      const reason = reverseReason.trim()
+      const fingerprint = JSON.stringify([
+        'ledger-reversal',
+        ownerId,
+        reverseTarget.id,
+        reason,
+      ])
+      const idempotencyKey = mutationKeys.current.get(fingerprint) ?? crypto.randomUUID()
+      mutationKeys.current.set(fingerprint, idempotencyKey)
+      await reverseLedgerEntry(ownerId, reverseTarget.id, reason, idempotencyKey)
+      mutationKeys.current.delete(fingerprint)
       setReverseTarget(null)
       setReverseReason('')
       setFeedback({ success: 'A linked reversal was posted. The original entry is unchanged.' })
@@ -162,21 +198,21 @@ export function BankrollPage() {
   return (
     <ProPage
       title="Bankroll"
-      description="Track exact balances with append-only entries. Poker Manager records activity but never holds or moves money."
+      description="Append-only records. Poker Manager never holds or moves money."
       actions={
         <>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
+            size="md"
+            className="gap-2"
             onClick={() => setPanel(panel === 'entry' ? null : 'entry')}
-            disabled={(resource.data?.accounts.length ?? 0) === 0}
+            disabled={activeAccounts.length === 0}
           >
             <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
             Post entry
           </Button>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
+            size="md"
+            className="gap-2"
             onClick={() => setPanel(panel === 'account' ? null : 'account')}
           >
             {panel === 'account' ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -262,7 +298,7 @@ export function BankrollPage() {
                   onChange={(event) => setEntry((value) => ({ ...value, accountId: event.target.value }))}
                 >
                   <option value="">Choose account</option>
-                  {(resource.data?.accounts ?? []).filter((item) => !item.is_archived).map((item) => (
+                  {activeAccounts.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name} · {item.currency}
                     </option>
@@ -360,36 +396,45 @@ export function BankrollPage() {
       {resource.error ? <ProError error={resource.error} retry={resource.reload} /> : null}
       {resource.data ? (
         <>
-          <section aria-label="Bankroll accounts" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {resource.data.accounts.map((item) => (
-              <Card key={item.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      {item.account_type}
-                    </p>
-                    <h2 className="mt-1 font-semibold text-ink">{item.name}</h2>
+          {resource.data.accounts.length ? (
+            <section
+              aria-label="Bankroll accounts"
+              className="grid border border-rule bg-ivory sm:grid-cols-2 xl:grid-cols-4"
+            >
+              {resource.data.accounts.map((item) => (
+                <article
+                  key={item.id}
+                  className="border-b border-rule p-4 last:border-b-0 sm:border-r xl:border-b-0 xl:last:border-r-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                        {item.account_type}
+                      </p>
+                      <h2 className="mt-1 font-semibold text-ink">{item.name}</h2>
+                    </div>
+                    {item.is_archived ? (
+                      <Badge>Archived</Badge>
+                    ) : (
+                      <WalletCards className="h-5 w-5 text-gold" aria-hidden="true" />
+                    )}
                   </div>
-                  {item.is_archived ? <Badge>Archived</Badge> : <WalletCards className="h-5 w-5 text-gold" />}
-                </div>
-                <p className="mt-5 text-2xl font-bold tabular-nums text-ink">
-                  {formatMinor(getAccountBalance(item, resource.data!.entries), item.currency)}
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Opened at {formatMinor(item.opening_balance_minor, item.currency)}
-                </p>
-              </Card>
-            ))}
-            {resource.data.accounts.length === 0 ? (
-              <div className="sm:col-span-2 xl:col-span-4">
-                <ProEmpty
-                  title="No bankroll accounts"
-                  description="Create a cash, bank, or online account before posting ledger activity."
-                  action={<Button onClick={() => setPanel('account')}>Create account</Button>}
-                />
-              </div>
-            ) : null}
-          </section>
+                  <p className="tnum mt-5 text-2xl font-bold text-ink">
+                    {formatMinor(getAccountBalance(item, resource.data!.entries), item.currency)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Opened at {formatMinor(item.opening_balance_minor, item.currency)}
+                  </p>
+                </article>
+              ))}
+            </section>
+          ) : (
+            <ProEmpty
+              title="No bankroll accounts"
+              description="Create an account before posting ledger activity."
+              action={<Button onClick={() => setPanel('account')}>Create account</Button>}
+            />
+          )}
 
           {resource.data.accounts.length ? (
             <Card>

@@ -26,23 +26,21 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-bg p-6">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex min-h-screen items-center justify-center bg-bg p-5 outline-none"
+      >
         <section
-          className="w-full max-w-lg rounded-2xl border border-border bg-white p-8 text-center shadow-sm"
+          className="w-full max-w-lg rounded border border-rule-strong bg-ivory p-6 sm:p-8"
           role="alert"
         >
-          <p className="text-sm font-semibold uppercase tracking-wider text-danger">
-            Poker Manager hit a problem
-          </p>
-          <h1 className="mt-2 text-2xl font-bold text-ink">Your data is still safe.</h1>
-          <p className="mt-3 text-muted">
-            Reload the app. If the problem continues, copy the message below for support.
-          </p>
-          <code className="mt-5 block overflow-auto rounded-lg bg-cream p-3 text-left text-sm text-ink">
+          <h1 className="font-serif text-2xl font-semibold text-ink">Something went wrong</h1>
+          <code className="mt-4 block overflow-auto rounded-sm border border-rule bg-bg p-3 text-left text-sm text-ink">
             {this.state.error.message}
           </code>
-          <Button className="mt-6" onClick={() => window.location.reload()}>
-            Reload Poker Manager
+          <Button className="mt-5" onClick={() => window.location.reload()}>
+            Reload
           </Button>
         </section>
       </main>

@@ -30,6 +30,7 @@ jobs:
           deno-version: v2.x
       - run: npm ci
       - run: npm run lint
+      - run: node tests/scripts/check-content.mjs
       - run: npm run test
       - name: Type-check Edge Functions
         shell: bash

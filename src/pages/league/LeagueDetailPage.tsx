@@ -17,12 +17,16 @@ import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
-import { formatCurrency, formatDate, getInitials } from '../../lib/utils'
+import { formatDate, getInitials } from '../../lib/utils'
 import { formatMoney, money } from '../../lib/money'
 import { useRealtimeSubscription } from '../../hooks/useRealtimeSubscription'
 import { AddPlayerModal } from '../../components/modals/AddPlayerModal'
 import { ScheduleGameModal } from '../../components/modals/ScheduleGameModal'
 import { CreateSeasonModal } from '../../components/modals/CreateSeasonModal'
+import { LeagueStandings } from '../../components/league/LeagueStandings'
+import { ActionBar } from '../../components/ui/ActionBar'
+import { SectionHeader } from '../../components/ui/SectionHeader'
+import { Surface } from '../../components/ui/Surface'
 import { LeagueSettings } from './LeagueSettings'
 import { useAuthStore } from '../../store/authStore'
 import {
@@ -131,44 +135,44 @@ export function LeagueDetailPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold text-ink">{league.name}</h1>
+      <SectionHeader
+        headingLevel={1}
+        eyebrow="League"
+        title={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {league.name}
             <Badge variant={access.role === 'member' ? 'default' : 'gold'}>
-              {access.isOwner ? <Crown className="mr-1 h-3 w-3" /> : access.canManage ? <ShieldCheck className="mr-1 h-3 w-3" /> : null}
+              {access.isOwner ? (
+                <Crown className="mr-1 h-3 w-3" aria-hidden="true" />
+              ) : access.canManage ? (
+                <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />
+              ) : null}
               {access.role}
             </Badge>
-          </div>
-          {league.description && <p className="mt-1 text-sm text-muted">{league.description}</p>}
-        </div>
-        {access.canManage && templates.length > 0 && (
-          <Button
-            size="sm"
-            onClick={() => {
-              setScheduleTemplateId(undefined)
-              setShowScheduleGame(true)
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" /> Create game
-          </Button>
-        )}
-      </div>
+          </span>
+        }
+        description={league.description}
+      />
 
       {failure && <Card className="border-danger/30 bg-danger/5 py-3 text-sm text-danger" role="alert">{failure}</Card>}
 
-      <Card className="flex flex-wrap items-center gap-2 py-3">
-        <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-muted">Season</span>
-        <div className="flex flex-1 gap-2 overflow-x-auto">
+      <Surface padding="sm">
+        <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">
+          Season
+        </span>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {seasons.map((season) => (
             <button
+              type="button"
               key={season.id}
               onClick={() => {
                 setSelectedSeasonId(season.id)
                 setTab('standings')
               }}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${
-                effectiveSeasonId === season.id ? 'bg-poker-green text-white' : 'bg-cream text-muted hover:text-ink'
+              className={`min-h-12 px-3 py-2 text-sm font-semibold ${
+                effectiveSeasonId === season.id
+                  ? 'bg-felt text-ivory'
+                  : 'border border-rule bg-bg text-muted hover:text-ink'
               }`}
             >
               {season.name}
@@ -176,65 +180,75 @@ export function LeagueDetailPage() {
             </button>
           ))}
         </div>
-        {access.canManage && selectedSeason && !selectedSeason.is_active && (
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={activateMutation.isPending}
-            onClick={() => activateMutation.mutate(selectedSeason.id)}
-          >
-            Make active
-          </Button>
-        )}
         {access.canManage && (
-          <Button size="sm" variant="secondary" aria-label="Create season" onClick={() => setShowCreateSeason(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
+          <ActionBar
+            sticky={false}
+            className="mt-3 border-x-0 border-b-0 px-0 pb-0"
+          >
+            {selectedSeason && !selectedSeason.is_active && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={activateMutation.isPending}
+                onClick={() => activateMutation.mutate(selectedSeason.id)}
+              >
+                Make active
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowCreateSeason(true)}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New season
+            </Button>
+            {templates.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setScheduleTemplateId(undefined)
+                  setShowScheduleGame(true)
+                }}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create game
+              </Button>
+            )}
+          </ActionBar>
         )}
-      </Card>
+      </Surface>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="League sections">
+      <nav
+        className="grid grid-cols-2 gap-px border border-rule bg-rule sm:grid-cols-3 lg:grid-cols-6"
+        aria-label="League sections"
+      >
         {tabs
           .filter((item) => !item.managerOnly || access.canManage)
           .map((item) => (
             <button
               key={item.key}
-              role="tab"
-              aria-selected={tab === item.key}
+              aria-pressed={tab === item.key}
               onClick={() => setTab(item.key)}
-              className={`flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${
-                tab === item.key ? 'border-gold text-ink' : 'border-transparent text-muted hover:text-ink'
+              className={`flex min-h-12 items-center justify-center gap-1.5 bg-ivory px-3 py-2 text-sm font-semibold ${
+                tab === item.key
+                  ? 'text-felt shadow-[inset_0_-3px_0_var(--color-gold)]'
+                  : 'text-muted hover:text-ink'
               }`}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-4 w-4" aria-hidden="true" />
               {item.label}
             </button>
           ))}
-      </div>
+      </nav>
 
       {tab === 'standings' && (
-        <div className="space-y-2">
-          {standingsQuery.isPending ? (
-            <Card><p className="py-4 text-center text-sm text-muted">Loading standings…</p></Card>
-          ) : standings.length === 0 ? (
-            <Card><p className="py-5 text-center text-sm text-muted">No finalized results in this season.</p></Card>
-          ) : standings.map((standing) => (
-            <Link key={standing.playerId} to={`/leagues/${leagueId}/players/${standing.playerId}`}>
-              <Card className="flex cursor-pointer items-center gap-3 py-3 transition-colors hover:border-gold/50">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cream font-bold text-gold">{standing.rank}</div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-poker-green text-sm font-semibold text-white">{getInitials(standing.displayName)}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-ink">{standing.displayName}</p>
-                  <p className="text-xs text-muted">{standing.gamesPlayed} games · {standing.wins} wins</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-gold">{standing.totalPoints} pts</p>
-                  <p className={`text-xs font-semibold ${standing.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(standing.netProfit)}</p>
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <LeagueStandings
+          leagueId={leagueId}
+          seasonName={selectedSeason?.name ?? 'Current season'}
+          standings={standings}
+          pending={standingsQuery.isPending}
+        />
       )}
 
       {tab === 'games' && (
@@ -890,7 +904,7 @@ function TemplatesPanel({
                 <label className="text-sm font-medium text-muted sm:col-span-2">
                   Blind plan (SB/BB/ante/minutes; use break/minutes)
                   <textarea
-                    className="mt-1 min-h-32 w-full rounded-lg border border-border bg-white px-3.5 py-2 font-mono text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+                    className="mt-1 min-h-32 w-full rounded-lg border border-border bg-white px-3.5 py-2 font-mono text-sm text-ink"
                     value={form.levelPlan}
                     onChange={(event) => setForm({ ...form, levelPlan: event.target.value })}
                   />
@@ -902,7 +916,7 @@ function TemplatesPanel({
                 <label className="text-sm font-medium text-muted">
                   Payout rules (JSON)
                   <textarea
-                    className="mt-1 min-h-24 w-full rounded-lg border border-border bg-white px-3.5 py-2 font-mono text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+                    className="mt-1 min-h-24 w-full rounded-lg border border-border bg-white px-3.5 py-2 font-mono text-sm text-ink"
                     value={form.payoutRules}
                     onChange={(event) => setForm({ ...form, payoutRules: event.target.value })}
                   />

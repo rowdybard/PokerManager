@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2, UserPlus, Crown, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -7,7 +7,9 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { InviteMembersModal } from '../../components/modals/InviteMembersModal'
+import { Modal } from '../../components/ui/Modal'
 import { errorMessage } from '../../lib/homeGames'
+import { deleteLeagueTransactionally } from '../../lib/transactionalSafety'
 import { useAuthStore } from '../../store/authStore'
 import type { League, PointsSystem, LeagueMember, LeagueRole } from '../../types'
 
@@ -32,6 +34,11 @@ export function LeagueSettings({
   const [saved, setSaved] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const deleteInput = useRef<HTMLInputElement>(null)
+  const deleteKey = useRef(crypto.randomUUID())
   const membersKey = ['home', 'league', league.id, 'members']
   const membersQuery = useQuery({
     queryKey: membersKey,
@@ -157,13 +164,20 @@ export function LeagueSettings({
   }
 
   async function deleteLeague() {
-    if (!isOwner || !confirm('Delete this league and all its data? This cannot be undone.')) return
-    const { error } = await supabase.from('leagues').delete().eq('id', league.id)
-    if (error) {
-      setFailure(error.message)
-      return
+    if (!isOwner || deleteConfirmation !== league.name) return
+    setDeleting(true)
+    setFailure(null)
+    try {
+      await deleteLeagueTransactionally({
+        leagueId: league.id,
+        confirmationName: deleteConfirmation,
+        idempotencyKey: deleteKey.current,
+      })
+      window.location.assign('/')
+    } catch (deleteError) {
+      setFailure(errorMessage(deleteError))
+      setDeleting(false)
     }
-    window.location.assign('/')
   }
 
   return (
@@ -298,7 +312,15 @@ export function LeagueSettings({
         <Card className="border-danger/30">
           <CardHeader><CardTitle className="text-danger">Danger zone</CardTitle></CardHeader>
           <CardContent>
-            <Button variant="danger" size="sm" onClick={() => void deleteLeague()}>
+            <Button
+              variant="destructive"
+              size="md"
+              onClick={() => {
+                deleteKey.current = crypto.randomUUID()
+                setDeleteConfirmation('')
+                setDeleteOpen(true)
+              }}
+            >
               <Trash2 className="mr-1 h-4 w-4" /> Delete league
             </Button>
           </CardContent>
@@ -311,6 +333,45 @@ export function LeagueSettings({
         leagueId={league.id}
         leagueName={league.name}
       />
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete league"
+        initialFocusRef={deleteInput}
+        dismissible={!deleting}
+      >
+        <p className="text-sm text-muted">
+          This permanently deletes the league, its games, and its results. Independent contacts
+          are preserved.
+        </p>
+        <label className="mt-4 block space-y-1.5 text-sm font-medium text-ink">
+          Type <strong>{league.name}</strong> to confirm
+          <Input
+            ref={deleteInput}
+            autoComplete="off"
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+          />
+        </label>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={deleting}
+            onClick={() => setDeleteOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deleting || deleteConfirmation !== league.name}
+            onClick={() => void deleteLeague()}
+          >
+            {deleting ? 'Deleting…' : 'Delete league'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

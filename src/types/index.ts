@@ -127,8 +127,9 @@ export interface StandingEntry {
   avatarUrl: string | null
   totalPoints: number
   gamesPlayed: number
-  totalWinnings: number
-  netProfit: number
+  totalWinningsMinor: string | null
+  netProfitMinor: string | null
+  currency: string | null
   wins: number
   rank: number
 }

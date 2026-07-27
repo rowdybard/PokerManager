@@ -119,9 +119,13 @@ export function GuestInvitePage() {
     (invite.event.confirmedCount ?? 0) >= invite.event.capacity
 
   return (
-    <main className="min-h-screen bg-[#102f25] px-4 py-8 text-ink sm:py-14">
-      <section className="mx-auto max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <header className="bg-poker-green px-6 py-7 text-white sm:px-9">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen bg-felt-deep px-3 py-5 text-ink outline-none sm:px-4 sm:py-12"
+    >
+      <section className="mx-auto max-w-xl overflow-hidden border border-gold-leaf/50 bg-ivory">
+        <header className="border-b border-gold-leaf/60 bg-felt px-5 py-6 text-white sm:px-8">
           <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-white/80">
             <Spade className="h-5 w-5" aria-hidden="true" />
             Poker Manager invitation
@@ -129,7 +133,7 @@ export function GuestInvitePage() {
           <h1 className="mt-4 text-3xl font-bold leading-tight">
             {invite?.event.title ??
               (token.length >= 32 && inviteQuery.isPending
-                ? 'Loading your game…'
+                ? 'Loading game…'
                 : 'Game invitation')}
           </h1>
           {invite && (
@@ -140,9 +144,9 @@ export function GuestInvitePage() {
           )}
         </header>
 
-        <div className="p-6 sm:p-9">
+        <div className="p-5 sm:p-8">
           {token.length < 32 || inviteQuery.isError ? (
-            <div role="alert" className="rounded-2xl border border-danger/30 bg-red-50 p-5">
+            <div role="alert" className="border border-danger/40 bg-danger/5 p-5">
               <h2 className="text-xl font-bold text-danger">This invitation is unavailable</h2>
               <p className="mt-2 text-sm text-ink">
                 {token.length < 32
@@ -152,46 +156,49 @@ export function GuestInvitePage() {
               <p className="mt-3 text-sm text-muted">Ask the host for a fresh link.</p>
             </div>
           ) : inviteQuery.isPending ? (
-            <div className="space-y-4" aria-live="polite">
-              <div className="h-16 animate-pulse rounded-xl bg-cream" />
-              <div className="h-32 animate-pulse rounded-xl bg-cream" />
+            <div className="space-y-4" aria-live="polite" role="status">
+              <span className="sr-only">Loading invitation.</span>
+              <div className="h-16 animate-pulse bg-cream" aria-hidden="true" />
+              <div className="h-32 animate-pulse bg-cream" aria-hidden="true" />
             </div>
           ) : invite ? (
             <>
               <dl className="grid gap-4 text-base">
-                <div className="flex gap-3">
-                  <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
-                  <div>
-                    <dt className="text-sm font-semibold text-muted">When</dt>
-                    <dd className="font-medium">
-                      {formatEventDate(invite.event.scheduledAt, invite.event.timezone)}
-                    </dd>
-                  </div>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3">
+                  <dt className="contents text-sm font-semibold text-muted">
+                    <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
+                    <span>When</span>
+                  </dt>
+                  <dd className="col-start-2 font-medium">
+                    {formatEventDate(invite.event.scheduledAt, invite.event.timezone)}
+                  </dd>
                 </div>
                 {invite.event.locationName && (
-                  <div className="flex gap-3">
-                    <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
-                    <div>
-                      <dt className="text-sm font-semibold text-muted">Where</dt>
-                      <dd className="font-medium">{invite.event.locationName}</dd>
-                    </div>
+                  <div className="grid grid-cols-[auto_1fr] gap-x-3">
+                    <dt className="contents text-sm font-semibold text-muted">
+                      <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
+                      <span>Where</span>
+                    </dt>
+                    <dd className="col-start-2 font-medium">{invite.event.locationName}</dd>
                   </div>
                 )}
                 {invite.event.capacity != null && (
-                  <div className="flex gap-3">
-                    <Users className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
-                    <div>
-                      <dt className="text-sm font-semibold text-muted">Players</dt>
-                      <dd className="font-medium">
-                        {invite.event.confirmedCount ?? 0} confirmed · {invite.event.capacity} seats
-                      </dd>
-                    </div>
+                  <div className="grid grid-cols-[auto_1fr] gap-x-3">
+                    <dt className="contents text-sm font-semibold text-muted">
+                      <Users className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
+                      <span>Players</span>
+                    </dt>
+                    <dd className="col-start-2 font-medium">
+                      {invite.event.confirmedCount ?? 0} confirmed · {invite.event.capacity} seats
+                    </dd>
                   </div>
                 )}
               </dl>
 
               {invite.event.notes && (
-                <p className="mt-6 rounded-xl bg-cream p-4 text-sm">{invite.event.notes}</p>
+                <p className="mt-6 border-l-4 border-gold bg-cream p-4 text-sm">
+                  {invite.event.notes}
+                </p>
               )}
 
               <div className="mt-8 border-t border-border pt-7">
@@ -214,7 +221,7 @@ export function GuestInvitePage() {
                         disabled={responseMutation.isPending}
                         aria-pressed={selected}
                         className={cn(
-                          'min-h-24 rounded-2xl border-2 border-border bg-white px-4 py-4 text-center transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold/40 disabled:opacity-60',
+                          'min-h-24 border-2 border-border bg-white px-4 py-4 text-center transition disabled:opacity-60',
                           selected ? option.active : 'hover:border-poker-green hover:bg-cream',
                         )}
                       >
@@ -235,7 +242,7 @@ export function GuestInvitePage() {
                   <select
                     value={guestCount}
                     onChange={(event) => setGuestCount(Number(event.target.value))}
-                    className="mt-2 h-12 w-full rounded-xl border border-border bg-white px-4 text-base focus:border-poker-green focus:outline-none focus:ring-2 focus:ring-poker-green/20"
+                    className="mt-2 h-12 w-full rounded-sm border border-border bg-white px-4 text-base"
                   >
                     {[0, 1, 2, 3, 4].map((count) => (
                       <option key={count} value={count}>
@@ -257,12 +264,15 @@ export function GuestInvitePage() {
                       : 'Response saved. You can change it here any time.'}
                   </p>
                 )}
+                <span className="sr-only" role="status" aria-live="polite">
+                  {responseMutation.isPending ? 'Saving response.' : ''}
+                </span>
               </div>
             </>
           ) : null}
         </div>
         <footer className="border-t border-border bg-cream px-6 py-4 text-center text-xs text-muted">
-          No account required. This private link controls only your invitation.
+          No account required.
         </footer>
       </section>
     </main>

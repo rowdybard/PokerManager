@@ -13,7 +13,6 @@ import {
   Trophy,
 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
-import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import {
   MetricCard,
@@ -25,6 +24,7 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import {
   calculateCareerMetrics,
+  dashboardMetricCurrencies,
   formatDate,
   formatDateTime,
   formatMinor,
@@ -43,14 +43,10 @@ export function ProDashboardPage() {
     if (!ownerId) throw new Error('Sign in to view My Poker.')
     return loadDashboardData(ownerId)
   })
-  const availableCurrencies = useMemo(() => {
-    if (!resource.data) return ['USD']
-    const codes = new Set([
-      ...resource.data.sessions.map((session) => session.currency),
-      ...resource.data.accounts.map((account) => account.currency),
-    ])
-    return codes.size ? Array.from(codes).sort() : ['USD']
-  }, [resource.data])
+  const availableCurrencies = useMemo(
+    () => (resource.data ? dashboardMetricCurrencies(resource.data) : ['USD']),
+    [resource.data],
+  )
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const currency = availableCurrencies.includes(selectedCurrency)
     ? selectedCurrency
@@ -59,18 +55,19 @@ export function ProDashboardPage() {
 
   return (
     <ProPage
-      title="Career overview"
-      description="Private results, bankroll, schedule, staking, and study records."
+      title="Overview"
+      description="Results, bankroll, schedule, goals, and study."
       actions={
         <>
-          <Link to="/pro/sessions">
-            <Button size="sm" className="bg-white text-poker-green hover:bg-cream">
-              Record session
-            </Button>
+          <Link
+            to="/pro/sessions"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-felt bg-felt px-4 text-sm font-semibold leading-none text-ivory hover:border-felt-deep hover:bg-felt-deep"
+          >
+            Record session
           </Link>
           <select
-            aria-label="Dashboard currency"
-            className="h-9 rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-semibold text-white"
+            aria-label="Overview currency"
+            className="h-11 rounded-sm border border-rule-strong bg-white px-3 text-sm font-semibold text-ink"
             value={currency}
             onChange={(event) => setSelectedCurrency(event.target.value)}
           >
@@ -87,7 +84,10 @@ export function ProDashboardPage() {
       {resource.error ? <ProError error={resource.error} retry={resource.reload} /> : null}
       {resource.data && metrics ? (
         <>
-          <section aria-label="Career metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section
+            aria-label="Career metrics"
+            className="grid border border-rule bg-ivory sm:grid-cols-2 xl:grid-cols-4"
+          >
             <MetricCard
               label="Career profit"
               value={formatMinor(metrics.totalProfitMinor, currency)}

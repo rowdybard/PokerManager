@@ -1,49 +1,200 @@
+@import '@fontsource-variable/source-serif-4';
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource/parisienne';
 @import 'tailwindcss';
 
 @theme {
-  --color-poker-green: #1a6b4c;
-  --color-poker-green-dark: #134d38;
-  --color-gold: #b8941f;
-  --color-gold-light: #e8c547;
-  --color-cream: #faf8f3;
-  --color-card: #ffffff;
-  --color-border: #e2ddd0;
-  --color-ink: #2d2a24;
-  --color-muted: #8a8578;
-  --color-bg: #f5f2ea;
-  --color-danger: #c0392b;
-  --color-success: #1a7a4c;
+  --font-sans: 'IBM Plex Sans Variable', 'Segoe UI', sans-serif;
+  --font-serif: 'Source Serif 4 Variable', Georgia, serif;
+  --font-brand: 'Parisienne', cursive;
+
+  --color-poker-green: #0f3d2e;
+  --color-poker-green-dark: #08291f;
+  --color-gold: #7d600f;
+  --color-gold-light: #c9a227;
+  --color-cream: #faf6ec;
+  --color-card: #fffdf7;
+  --color-border: #d8ccb3;
+  --color-ink: #1e1b16;
+  --color-muted: #635c4d;
+  --color-bg: #f4efe3;
+  --color-danger: #8c2f27;
+  --color-success: #1f684a;
+
+  --color-felt: #0f3d2e;
+  --color-felt-deep: #08291f;
+  --color-gold-leaf: #c9a227;
+  --color-ivory: #fffdf7;
+  --color-rule: #ded3bd;
+  --color-rule-strong: #bcae91;
+  --color-ink-soft: #494235;
+  --color-profit: #1f684a;
+  --color-loss: #9b3028;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+}
+
+:root {
+  --focus-ring: 3px solid #2f73d9;
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-width: 320px;
+  max-width: 100%;
+  min-height: 100%;
+  overflow-x: clip;
+  background: var(--color-bg);
+}
+
+html.modal-open {
+  overflow: hidden;
+}
+
 body {
-  font-family: 'Georgia', 'Times New Roman', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f5f2ea;
-  color: #2d2a24;
+  min-width: 320px;
+  max-width: 100%;
+  min-height: 100svh;
+  margin: 0;
+  overflow-x: clip;
+  overflow-wrap: break-word;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100svh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+a:not([class]) {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+main a:not(.nav-link) {
+  text-decoration-line: underline;
+}
+
+.nav-link {
+  text-decoration: none;
+}
+
+:where(
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex='-1'])
+):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-gold-leaf);
+  color: var(--color-felt-deep);
 }
 
 #root {
+  min-width: 0;
   min-height: 100svh;
+}
+
+img,
+svg,
+canvas {
+  max-width: 100%;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+.parchment {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+}
+
+.felt {
+  background-color: var(--color-felt);
+  color: var(--color-ivory);
+}
+
+dialog::backdrop {
+  background: rgb(8 41 31 / 80%);
 }
 
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #f5f2ea;
+  background: var(--color-bg);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #d4cfbf;
-  border-radius: 4px;
+  border-radius: 2px;
+  background: var(--color-rule-strong);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #b8b29f;
+  background: var(--color-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --focus-ring: 3px solid Highlight;
+  }
+
+  :where(a, button, input, select, textarea, dialog, [role='button']) {
+    forced-color-adjust: auto;
+  }
+
+  [aria-current='page'] {
+    border: 2px solid currentColor;
+  }
+
+  .tnum {
+    color: CanvasText;
+  }
 }

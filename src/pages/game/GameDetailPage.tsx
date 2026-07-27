@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 import { z } from 'zod'
@@ -17,7 +17,6 @@ import {
   Save,
   Shuffle,
   Spade,
-  Trash2,
   UserRoundCheck,
   Users,
   WalletCards,
@@ -28,6 +27,10 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { Badge } from '../../components/ui/Badge'
+import { ActionBar } from '../../components/ui/ActionBar'
+import { SectionHeader } from '../../components/ui/SectionHeader'
+import { StatColumns } from '../../components/ui/StatColumns'
+import { Surface } from '../../components/ui/Surface'
 import { formatDateTime, getInitials } from '../../lib/utils'
 import { formatMoney, money } from '../../lib/money'
 import {
@@ -35,7 +38,6 @@ import {
   amountToMinorUnits,
   assignSeat,
   createIdempotencyKey,
-  deleteGameResult,
   errorMessage,
   finalizeGame,
   gameDisplayName,
@@ -46,8 +48,6 @@ import {
   loadGameWorkspace,
   recordGameTransaction,
   recordTournamentFinish,
-  saveClockState,
-  saveGameResult,
   setParticipantCheckIn,
   summarizeCloseout,
   transitionGamePhase,
@@ -60,6 +60,14 @@ import {
   type TournamentClockState,
 } from '../../lib/homeGames'
 import {
+  commandTournamentClock,
+  recordGameResultTransactionally,
+  type GameResultVersion,
+  type TournamentClock,
+  type TournamentClockCommand,
+} from '../../lib/transactionalSafety'
+import { decimalToMinorExact, minorToDecimal } from '../../lib/pro'
+import {
   cacheActiveEvent,
   enqueueOfflineAction,
   flushOfflineActions,
@@ -68,6 +76,7 @@ import {
   type OfflineAction,
 } from '../../lib/offlineQueue'
 import { useRealtimeSubscription } from '../../hooks/useRealtimeSubscription'
+import { GameResultsScoreSheet } from '../../components/game/GameResultsScoreSheet'
 
 type WorkspaceTab = 'roster' | 'money' | 'seating' | 'clock' | 'results' | 'closeout'
 
@@ -119,6 +128,9 @@ export function GameDetailPage() {
     void refresh()
   })
   useRealtimeSubscription('game_results', gameId ? `game_id=eq.${gameId}` : undefined, () => {
+    void refresh()
+  })
+  useRealtimeSubscription('tournament_clocks', gameId ? `game_id=eq.${gameId}` : undefined, () => {
     void refresh()
   })
 
@@ -217,32 +229,48 @@ export function GameDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <Link to={`/leagues/${leagueId}`} className="flex items-center gap-1 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="h-4 w-4" />
+    <div className="space-y-5 pb-24 lg:pb-0">
+      <Link
+        to={`/leagues/${leagueId}`}
+        className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-poker-green underline-offset-4 hover:underline"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Back to {league.name}
       </Link>
 
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">
-                {game.kind} game
-              </span>
-              <Badge variant={game.phase === 'finalized' ? 'green' : game.phase === 'cancelled' ? 'red' : 'gold'}>
+      <Surface padding="md">
+        <SectionHeader
+          headingLevel={1}
+          eyebrow={`${game.kind} game`}
+          title={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {gameDisplayName(game, league.name)}
+              <Badge
+                variant={
+                  game.phase === 'finalized'
+                    ? 'green'
+                    : game.phase === 'cancelled'
+                      ? 'red'
+                      : 'gold'
+                }
+              >
                 {gamePhaseLabel(game.phase)}
               </Badge>
               {!access.canManage && <Badge>Read only</Badge>}
-            </div>
-            <h1 className="mt-1 text-2xl font-bold text-ink">{gameDisplayName(game, league.name)}</h1>
-            <p className="mt-1 text-sm text-muted">{formatDateTime(game.scheduled_date)}</p>
-            {game.location && <p className="mt-1 text-sm text-muted">{game.location}</p>}
-          </div>
+            </span>
+          }
+          description={
+            <>
+              {formatDateTime(game.scheduled_date)}
+              {game.location ? ` · ${game.location}` : ''}
+            </>
+          }
+          action={
+            <>
           {access.canManage && game.phase !== 'finalized' && game.phase !== 'cancelled' && (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={() => void createShareLink()}>
-                <Link2 className="mr-1 h-4 w-4" />
+                <Link2 className="h-4 w-4" aria-hidden="true" />
                 Share invite
               </Button>
               <Select
@@ -281,20 +309,37 @@ export function GameDetailPage() {
                 )
               })}
             >
-              <UserRoundCheck className="mr-1 h-4 w-4" />
+              <UserRoundCheck className="h-4 w-4" aria-hidden="true" />
               Link to My Poker
             </Button>
           )}
-        </div>
-        <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-          <Info label="Capacity" value={game.capacity ? String(game.capacity) : 'Open'} />
-          <Info
-            label={game.kind === 'cash' ? 'Buy-in' : 'Entry'}
-            value={formatMoney(money(String(Math.round(Number(game.buy_in) * 100)), game.currency))}
-          />
-          <Info label="Checked in" value={String(workspace.participants.filter((participant) => participant.checked_in_at).length)} />
-        </div>
-      </Card>
+            </>
+          }
+        />
+        <StatColumns
+          className="mt-4"
+          items={[
+            {
+              label: 'Capacity',
+              value: game.capacity ? String(game.capacity) : 'Open',
+            },
+            {
+              label: game.kind === 'cash' ? 'Buy-in' : 'Entry',
+              value: formatMoney(
+                money(String(Math.round(Number(game.buy_in) * 100)), game.currency),
+              ),
+            },
+            {
+              label: 'Checked in',
+              value: String(
+                workspace.participants.filter((participant) => participant.checked_in_at)
+                  .length,
+              ),
+              detail: `${workspace.participants.length} invited`,
+            },
+          ]}
+        />
+      </Surface>
 
       {(notice || failure || shareUrl || queuedCount > 0) && (
         <div className="space-y-2" aria-live="polite">
@@ -326,22 +371,50 @@ export function GameDetailPage() {
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Game workspace">
+      <nav
+        className="grid grid-cols-2 gap-px border border-rule bg-rule sm:grid-cols-3 lg:grid-cols-6"
+        aria-label="Game workspace"
+      >
         {tabs.filter((item) => !item.hidden).map((item) => (
           <button
             key={item.key}
-            role="tab"
-            aria-selected={tab === item.key}
+            aria-pressed={tab === item.key}
             onClick={() => setTab(item.key)}
-            className={`flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${
-              tab === item.key ? 'border-gold text-ink' : 'border-transparent text-muted hover:text-ink'
+            className={`flex min-h-12 items-center justify-center gap-1.5 bg-ivory px-3 py-2 text-sm font-semibold ${
+              tab === item.key
+                ? 'text-felt shadow-[inset_0_-3px_0_var(--color-gold)]'
+                : 'text-muted hover:text-ink'
             }`}
           >
-            <item.icon className="h-4 w-4" />
+            <item.icon className="h-4 w-4" aria-hidden="true" />
             {item.label}
           </button>
         ))}
-      </div>
+      </nav>
+
+      {access.canManage && game.phase !== 'finalized' && game.phase !== 'cancelled' && (
+        <ActionBar
+          label="Game-night actions"
+          className="fixed inset-x-2 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 lg:static"
+        >
+          <Button
+            variant={tab === 'results' ? 'secondary' : 'primary'}
+            className="min-w-0 flex-1 lg:flex-none"
+            onClick={() => setTab('results')}
+          >
+            <ListChecks className="h-4 w-4" aria-hidden="true" />
+            Record result
+          </Button>
+          <Button
+            variant={tab === 'closeout' ? 'primary' : 'secondary'}
+            className="min-w-0 flex-1 lg:flex-none"
+            onClick={() => setTab('closeout')}
+          >
+            <Check className="h-4 w-4" aria-hidden="true" />
+            Closeout
+          </Button>
+        </ActionBar>
+      )}
 
       {tab === 'roster' && (
         <RosterPanel
@@ -372,10 +445,17 @@ export function GameDetailPage() {
           persisted={workspace.clock}
           readOnly={readOnly}
           onFailure={setFailure}
+          onRefresh={refresh}
         />
       )}
       {tab === 'results' && (
-        <ResultsPanel workspace={workspace} readOnly={readOnly} onRefresh={refresh} onFailure={setFailure} />
+        <ResultsPanel
+          workspace={workspace}
+          readOnly={readOnly}
+          canCorrect={access.canManage}
+          onRefresh={refresh}
+          onFailure={setFailure}
+        />
       )}
       {tab === 'closeout' && (
         <CloseoutPanel
@@ -799,66 +879,66 @@ function ClockPanel({
   persisted,
   readOnly,
   onFailure,
+  onRefresh,
 }: {
   gameId: string
   levels: GameWorkspace['blindLevels']
   persisted: TournamentClockState | null
   readOnly: boolean
   onFailure: (message: string | null) => void
+  onRefresh: () => Promise<unknown>
 }) {
   const initialLevel = persisted?.current_level ?? levels[0]?.level_number ?? 1
-  const initialDuration = levels.find((level) => level.level_number === initialLevel)?.duration_seconds ?? 1200
-  const [levelNumber, setLevelNumber] = useState(initialLevel)
-  const [remaining, setRemaining] = useState(persisted?.remaining_seconds ?? initialDuration)
-  const [running, setRunning] = useState(persisted?.is_running ?? false)
+  const initialDuration =
+    levels.find((level) => level.level_number === initialLevel)?.duration_seconds ?? 1200
+  const [clock, setClock] = useState<TournamentClock>({
+    game_id: gameId,
+    current_level: initialLevel,
+    remaining_seconds: persisted?.remaining_seconds ?? initialDuration,
+    is_running: persisted?.is_running ?? false,
+    started_at: persisted?.started_at ?? null,
+    paused_at: persisted?.paused_at ?? null,
+    revision: persisted?.revision ?? '0',
+    updated_at: persisted?.updated_at ?? new Date().toISOString(),
+  })
+  const [now, setNow] = useState(() => Date.now())
+  const [busy, setBusy] = useState(false)
+  const commandKeys = useRef(new Map<string, string>())
+  const levelNumber = clock.current_level
   const level = levels.find((entry) => entry.level_number === levelNumber)
+  const elapsed =
+    clock.is_running && clock.started_at
+      ? Math.max(0, Math.floor((now - new Date(clock.started_at).getTime()) / 1000))
+      : 0
+  const remaining = Math.max(0, clock.remaining_seconds - elapsed)
 
   useEffect(() => {
-    if (!running || remaining <= 0) return
-    const timer = window.setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000)
+    if (!clock.is_running) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [running, remaining])
+  }, [clock.is_running])
 
-  async function persist(nextRunning = running) {
-    const state: TournamentClockState = {
-      game_id: gameId,
-      current_level: levelNumber,
-      remaining_seconds: remaining,
-      is_running: nextRunning,
-      started_at: nextRunning ? new Date().toISOString() : persisted?.started_at ?? null,
-      updated_at: new Date().toISOString(),
-    }
+  async function runCommand(command: TournamentClockCommand) {
+    const operation = `${command}:${clock.revision}`
+    const idempotencyKey =
+      commandKeys.current.get(operation) ?? createIdempotencyKey(`clock-${command}`)
+    commandKeys.current.set(operation, idempotencyKey)
+    setBusy(true)
+    onFailure(null)
     try {
-      await saveClockState(state)
-    } catch (clockError) {
-      onFailure(errorMessage(clockError))
-    }
-  }
-
-  async function toggle() {
-    const next = !running
-    setRunning(next)
-    await persist(next)
-  }
-
-  async function nextLevel() {
-    const currentIndex = levels.findIndex((entry) => entry.level_number === levelNumber)
-    const next = levels[currentIndex + 1]
-    if (!next) return
-    setRunning(false)
-    setLevelNumber(next.level_number)
-    setRemaining(next.duration_seconds)
-    try {
-      await saveClockState({
-        game_id: gameId,
-        current_level: next.level_number,
-        remaining_seconds: next.duration_seconds,
-        is_running: false,
-        started_at: null,
-        updated_at: new Date().toISOString(),
+      const next = await commandTournamentClock({
+        gameId,
+        command,
+        expectedRevision: clock.revision,
+        idempotencyKey,
       })
+      setClock(next)
+      setNow(Date.now())
     } catch (clockError) {
       onFailure(errorMessage(clockError))
+    } finally {
+      await onRefresh()
+      setBusy(false)
     }
   }
 
@@ -879,13 +959,35 @@ function ClockPanel({
           </p>
         )}
         {!readOnly && (
-          <div className="flex justify-center gap-2">
-            <Button onClick={() => void toggle()}>
-              {running ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
-              {running ? 'Pause' : 'Start'}
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => void runCommand(clock.is_running ? 'pause' : 'start')}
+            >
+              {clock.is_running ? (
+                <Pause className="mr-1 h-4 w-4" />
+              ) : (
+                <Play className="mr-1 h-4 w-4" />
+              )}
+              {clock.is_running ? 'Pause' : 'Start'}
             </Button>
-            <Button variant="secondary" onClick={() => void nextLevel()} disabled={levels.findIndex((entry) => entry.level_number === levelNumber) >= levels.length - 1}>
+            <Button
+              variant="secondary"
+              disabled={
+                busy ||
+                levels.findIndex((entry) => entry.level_number === levelNumber) >=
+                  levels.length - 1
+              }
+              onClick={() => void runCommand('advance')}
+            >
               Next level
+            </Button>
+            <Button
+              variant="quiet"
+              disabled={busy}
+              onClick={() => void runCommand('reset')}
+            >
+              Reset
             </Button>
           </div>
         )}
@@ -910,22 +1012,30 @@ function ClockPanel({
 function ResultsPanel({
   workspace,
   readOnly,
+  canCorrect,
   onRefresh,
   onFailure,
 }: {
   workspace: GameWorkspace
   readOnly: boolean
+  canCorrect: boolean
   onRefresh: () => Promise<unknown>
   onFailure: (message: string | null) => void
 }) {
   const [showForm, setShowForm] = useState(false)
+  const [correcting, setCorrecting] = useState<GameResultVersion | null>(null)
   const [form, setForm] = useState({
     playerId: '',
     finishPosition: String(workspace.results.length + 1),
     initialBuyIn: String(workspace.game.buy_in ?? 0),
     payout: '0',
-    rebuys: '0',
+    reentryCount: '0',
+    reentryTotal: '0',
+    addOnCount: '0',
+    addOnTotal: '0',
+    bounty: '0',
   })
+  const resultAttempt = useRef<{ fingerprint: string; key: string } | null>(null)
   const [finish, setFinish] = useState({
     participantId: '',
     position: '',
@@ -935,6 +1045,47 @@ function ResultsPanel({
   const used = new Set(workspace.results.map((result) => result.player_id))
   const available = workspace.players.filter((player) => !used.has(player.id))
 
+  function resetResultForm() {
+    setCorrecting(null)
+    setShowForm(false)
+    setForm({
+      playerId: '',
+      finishPosition: String(workspace.results.length + 2),
+      initialBuyIn: String(workspace.game.buy_in ?? 0),
+      payout: '0',
+      reentryCount: '0',
+      reentryTotal: '0',
+      addOnCount: '0',
+      addOnTotal: '0',
+      bounty: '0',
+    })
+    resultAttempt.current = null
+  }
+
+  function beginCorrection(result: GameWorkspace['results'][number]) {
+    const latest = workspace.resultVersions
+      .filter((version) => version.player_id === result.player_id)
+      .sort((left, right) => right.version - left.version)[0]
+    if (!latest) {
+      onFailure('This legacy result has no auditable version to correct.')
+      return
+    }
+    setCorrecting(latest)
+    setForm({
+      playerId: latest.player_id,
+      finishPosition: String(latest.finish_position),
+      initialBuyIn: minorToDecimal(latest.entry_minor, latest.currency),
+      payout: minorToDecimal(latest.payout_minor, latest.currency),
+      reentryCount: String(latest.reentry_count),
+      reentryTotal: minorToDecimal(latest.reentry_total_minor, latest.currency),
+      addOnCount: String(latest.add_on_count),
+      addOnTotal: minorToDecimal(latest.add_on_total_minor, latest.currency),
+      bounty: minorToDecimal(latest.bounty_minor, latest.currency),
+    })
+    resultAttempt.current = null
+    setShowForm(true)
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (!form.playerId) {
@@ -942,26 +1093,38 @@ function ResultsPanel({
       return
     }
     try {
-      await saveGameResult(
-        {
-          gameId: workspace.game.id,
-          playerId: form.playerId,
-          finishPosition: Number(form.finishPosition),
-          initialBuyIn: Number(form.initialBuyIn),
-          payout: Number(form.payout),
-          rebuys: Number(form.rebuys),
-          rebuyAmount: Number(workspace.game.buy_in),
-        },
-        workspace.league.points_system,
-      )
-      setShowForm(false)
-      setForm({
-        playerId: '',
-        finishPosition: String(workspace.results.length + 2),
-        initialBuyIn: String(workspace.game.buy_in ?? 0),
-        payout: '0',
-        rebuys: '0',
+      const input = {
+        gameId: workspace.game.id,
+        playerId: form.playerId,
+        finishPosition: Number(form.finishPosition),
+        entryMinor: decimalToMinorExact(form.initialBuyIn, workspace.game.currency),
+        reentryCount: Number(form.reentryCount),
+        reentryTotalMinor: decimalToMinorExact(
+          form.reentryTotal,
+          workspace.game.currency,
+        ),
+        addOnCount: Number(form.addOnCount),
+        addOnTotalMinor: decimalToMinorExact(
+          form.addOnTotal,
+          workspace.game.currency,
+        ),
+        bountyMinor: decimalToMinorExact(form.bounty, workspace.game.currency),
+        payoutMinor: decimalToMinorExact(form.payout, workspace.game.currency),
+        currency: workspace.game.currency,
+        correctsVersionId: correcting?.id ?? null,
+      }
+      const fingerprint = JSON.stringify(input)
+      if (!resultAttempt.current || resultAttempt.current.fingerprint !== fingerprint) {
+        resultAttempt.current = {
+          fingerprint,
+          key: createIdempotencyKey('game-result'),
+        }
+      }
+      await recordGameResultTransactionally({
+        ...input,
+        idempotencyKey: resultAttempt.current.key,
       })
+      resetResultForm()
       await onRefresh()
     } catch (resultError) {
       onFailure(errorMessage(resultError))
@@ -983,21 +1146,6 @@ function ResultsPanel({
         eliminatedByParticipantId: finish.eliminatedByParticipantId || null,
         bountyMinor,
       })
-      if (BigInt(bountyMinor) > 0n && finish.eliminatedByParticipantId) {
-        const recipient = workspace.participants.find(
-          (participant) => participant.id === finish.eliminatedByParticipantId,
-        )
-        await recordGameTransaction({
-          gameId: workspace.game.id,
-          participantId: recipient?.id ?? null,
-          playerId: recipient?.player_id || null,
-          kind: 'bounty',
-          amountMinor: bountyMinor,
-          currency: workspace.game.currency,
-          note: 'Tournament bounty',
-          idempotencyKey: createIdempotencyKey('tournament-bounty'),
-        })
-      }
       setFinish({ participantId: '', position: '', eliminatedByParticipantId: '', bounty: '0' })
       await onRefresh()
     } catch (finishError) {
@@ -1020,19 +1168,41 @@ function ResultsPanel({
       </div>
       {showForm && (
         <Card>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onSubmit={submit}>
+          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
             <label className="text-sm font-medium text-muted">
               Player
-              <Select className="mt-1" value={form.playerId} onChange={(event) => setForm({ ...form, playerId: event.target.value })}>
+              <Select
+                className="mt-1"
+                value={form.playerId}
+                disabled={Boolean(correcting)}
+                onChange={(event) => setForm({ ...form, playerId: event.target.value })}
+              >
                 <option value="">Choose player…</option>
-                {available.map((player) => <option key={player.id} value={player.id}>{player.display_name}</option>)}
+                {(correcting
+                  ? workspace.players.filter((player) => player.id === correcting.player_id)
+                  : available
+                ).map((player) => (
+                  <option key={player.id} value={player.id}>{player.display_name}</option>
+                ))}
               </Select>
             </label>
             <Field label="Finish" type="number" min="1" value={form.finishPosition} onChange={(value) => setForm({ ...form, finishPosition: value })} />
             <Field label="Initial buy-in" type="number" min="0" step="0.01" value={form.initialBuyIn} onChange={(value) => setForm({ ...form, initialBuyIn: value })} />
             <Field label="Payout" type="number" min="0" step="0.01" value={form.payout} onChange={(value) => setForm({ ...form, payout: value })} />
-            <Field label="Rebuys / re-entries" type="number" min="0" value={form.rebuys} onChange={(value) => setForm({ ...form, rebuys: value })} />
-            <Button type="submit" className="self-end"><Save className="mr-1 h-4 w-4" /> Save result</Button>
+            <Field label="Re-entry count" type="number" min="0" step="1" value={form.reentryCount} onChange={(value) => setForm({ ...form, reentryCount: value })} />
+            <Field label="Re-entry total" type="number" min="0" step="0.01" value={form.reentryTotal} onChange={(value) => setForm({ ...form, reentryTotal: value })} />
+            <Field label="Add-on count" type="number" min="0" step="1" value={form.addOnCount} onChange={(value) => setForm({ ...form, addOnCount: value })} />
+            <Field label="Add-on total" type="number" min="0" step="0.01" value={form.addOnTotal} onChange={(value) => setForm({ ...form, addOnTotal: value })} />
+            <Field label="Bounties received" type="number" min="0" step="0.01" value={form.bounty} onChange={(value) => setForm({ ...form, bounty: value })} />
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3 lg:justify-end">
+              <Button type="button" variant="secondary" onClick={resetResultForm}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                <Save className="mr-1 h-4 w-4" />
+                {correcting ? 'Save correction' : 'Save result'}
+              </Button>
+            </div>
           </form>
         </Card>
       )}
@@ -1082,42 +1252,13 @@ function ResultsPanel({
           </CardContent>
         </Card>
       )}
-      {workspace.results.length === 0 ? (
-        <Card><p className="py-6 text-center text-sm text-muted">No results recorded.</p></Card>
-      ) : (
-        <div className="space-y-2">
-          {workspace.results.map((result) => {
-            const player = workspace.players.find((entry) => entry.id === result.player_id)
-            return (
-              <Card key={result.id} className="flex items-center gap-3 py-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cream font-bold text-gold">{result.finish_position}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-ink">{player?.display_name ?? 'Unknown player'}</p>
-                  <p className="text-xs text-muted">{result.rebuys} rebuy{result.rebuys === 1 ? '' : 's'} · {result.points_earned} points</p>
-                </div>
-                <p className="text-sm font-semibold text-ink">{formatMoney(money(String(Math.round(Number(result.payout) * 100)), workspace.game.currency))}</p>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    aria-label={`Delete result for ${player?.display_name ?? 'player'}`}
-                    className="rounded p-2 text-muted hover:bg-danger/10 hover:text-danger"
-                    onClick={async () => {
-                      try {
-                        await deleteGameResult(result.id, workspace.game.id, workspace.league.points_system)
-                        await onRefresh()
-                      } catch (deleteError) {
-                        onFailure(errorMessage(deleteError))
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </Card>
-            )
-          })}
-        </div>
-      )}
+      <GameResultsScoreSheet
+        results={workspace.results}
+        players={workspace.players}
+        currency={workspace.game.currency}
+        readOnly={!canCorrect}
+        onCorrect={(result) => beginCorrection(result)}
+      />
     </div>
   )
 }

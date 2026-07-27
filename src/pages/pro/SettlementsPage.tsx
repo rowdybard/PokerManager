@@ -1,18 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import {
-  CheckCircle2,
-  Clipboard,
-  ExternalLink,
-  FileCheck2,
-  Paperclip,
-  Plus,
-  Scale,
-  ShieldAlert,
-  X,
-} from 'lucide-react'
-import { Badge } from '../../components/ui/Badge'
-import { Button } from '../../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { Plus, Scale, X } from 'lucide-react'
+import { SettlementLedgerRow } from '../../components/settlements/SettlementLedgerRow'
 import {
   Field,
   FormFeedback,
@@ -20,34 +8,84 @@ import {
   FormSelect,
   FormTextarea,
   MoneyField,
-  ProEmpty,
   ProError,
   ProLoading,
   ProPage,
   useProResource,
 } from '../../components/pro'
-import { useAuthStore } from '../../store/authStore'
+import { Button } from '../../components/ui/Button'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { Modal } from '../../components/ui/Modal'
+import { SectionHeader } from '../../components/ui/SectionHeader'
+import { Surface } from '../../components/ui/Surface'
 import {
   createSettlement,
-  decimalToMinor,
-  formatDate,
-  formatMinor,
+  decimalToMinorExact,
   getPrivateDocumentUrl,
   listSettlements,
-  minorToDecimal,
-  providerUrlForSettlement,
   todayInputValue,
   updateSettlementStatus,
   uploadSettlementConfirmation,
   type Settlement,
+  type SettlementInput,
   type SettlementStatus,
 } from '../../lib/pro'
+import { useAuthStore } from '../../store/authStore'
 
-function settlementTone(status: SettlementStatus): 'default' | 'green' | 'red' | 'gold' {
-  if (status === 'paid') return 'green'
-  if (status === 'disputed') return 'red'
-  if (status === 'pending') return 'gold'
-  return 'default'
+type SettlementForm = {
+  direction: Settlement['direction']
+  counterparty: string
+  amount: string
+  currency: string
+  reason: string
+  method: string
+  handle: string
+  memo: string
+  dueDate: string
+}
+
+function emptyForm(): SettlementForm {
+  return {
+    direction: 'payable',
+    counterparty: '',
+    amount: '',
+    currency: 'USD',
+    reason: '',
+    method: '',
+    handle: '',
+    memo: '',
+    dueDate: todayInputValue(),
+  }
+}
+
+function transitionCopy(status: SettlementStatus) {
+  if (status === 'paid') {
+    return {
+      title: 'Confirm payment',
+      description:
+        'This records the payment at server time. PokerManager does not move any funds.',
+      action: 'Mark paid',
+    }
+  }
+  if (status === 'void') {
+    return {
+      title: 'Void obligation',
+      description: 'The obligation stays in the audit trail and can be reopened later.',
+      action: 'Void obligation',
+    }
+  }
+  if (status === 'disputed') {
+    return {
+      title: 'Mark as disputed',
+      description: 'Use this when the payment or obligation needs review.',
+      action: 'Mark disputed',
+    }
+  }
+  return {
+    title: 'Return to pending',
+    description: 'The obligation will return to the pending queue.',
+    action: 'Return to pending',
+  }
 }
 
 export function SettlementsPage() {
@@ -60,19 +98,20 @@ export function SettlementsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const [statusFilter, setStatusFilter] = useState<'all' | SettlementStatus>('all')
-  const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [pendingTransition, setPendingTransition] = useState<{
+    settlement: Settlement
+    status: SettlementStatus
+  } | null>(null)
+  const [form, setForm] = useState<SettlementForm>(emptyForm)
+  const createAttempt = useRef<{ fingerprint: string; key: string } | null>(null)
+  const transitionKeys = useRef(new Map<string, string>())
+  const attachmentAttempts = useRef(
+    new Map<string, { fingerprint: string; key: string }>(),
+  )
+  const uploadTarget = useRef<Settlement | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
-  const [form, setForm] = useState({
-    direction: 'payable' as Settlement['direction'],
-    counterparty: '',
-    amount: '',
-    currency: 'USD',
-    reason: '',
-    method: '',
-    handle: '',
-    memo: '',
-    dueDate: todayInputValue(),
-  })
+  const confirmButton = useRef<HTMLButtonElement>(null)
 
   const settlements = useMemo(
     () =>
@@ -88,30 +127,32 @@ export function SettlementsPage() {
     setSubmitting(true)
     setFeedback({})
     try {
-      await createSettlement(ownerId, {
+      const amountMinor = decimalToMinorExact(form.amount, form.currency)
+      if (BigInt(amountMinor) <= 0n) {
+        throw new Error('Settlement amount must be greater than zero.')
+      }
+      const request: Omit<SettlementInput, 'idempotency_key'> = {
         session_id: null,
         direction: form.direction,
         counterparty: form.counterparty.trim(),
-        amount_minor: decimalToMinor(form.amount, form.currency),
-        currency: form.currency,
+        amount_minor: amountMinor,
+        currency: form.currency.trim().toUpperCase(),
         reason: form.reason.trim(),
         external_method: form.method.trim() || null,
         external_handle: form.handle.trim() || null,
         memo: form.memo.trim() || null,
         due_date: form.dueDate || null,
-        idempotency_key: crypto.randomUUID(),
+      }
+      const fingerprint = JSON.stringify(request)
+      if (!createAttempt.current || createAttempt.current.fingerprint !== fingerprint) {
+        createAttempt.current = { fingerprint, key: crypto.randomUUID() }
+      }
+      await createSettlement(ownerId, {
+        ...request,
+        idempotency_key: createAttempt.current.key,
       })
-      setForm({
-        direction: 'payable',
-        counterparty: '',
-        amount: '',
-        currency: 'USD',
-        reason: '',
-        method: '',
-        handle: '',
-        memo: '',
-        dueDate: todayInputValue(),
-      })
+      createAttempt.current = null
+      setForm(emptyForm())
       setShowForm(false)
       setFeedback({ success: 'Settlement obligation recorded.' })
       await resource.reload()
@@ -122,15 +163,29 @@ export function SettlementsPage() {
     }
   }
 
-  const changeStatus = async (settlement: Settlement, status: SettlementStatus) => {
-    if (!ownerId) return
+  const confirmTransition = async () => {
+    if (!ownerId || !pendingTransition) return
+    const { settlement, status } = pendingTransition
+    const operation = `${settlement.id}:${settlement.revision}:${status}`
+    const key = transitionKeys.current.get(operation) ?? crypto.randomUUID()
+    transitionKeys.current.set(operation, key)
+    setBusyId(settlement.id)
     setFeedback({})
     try {
-      await updateSettlementStatus(ownerId, settlement.id, status)
+      await updateSettlementStatus(
+        ownerId,
+        settlement.id,
+        status,
+        settlement.revision,
+        key,
+      )
       setFeedback({ success: `Settlement marked ${status}.` })
-      await resource.reload()
     } catch (error) {
       setFeedback({ error: error instanceof Error ? error.message : 'Could not update settlement.' })
+    } finally {
+      setPendingTransition(null)
+      await resource.reload()
+      setBusyId(null)
     }
   }
 
@@ -143,48 +198,89 @@ export function SettlementsPage() {
     }
   }
 
-  const chooseConfirmation = (settlementId: string) => {
-    setUploadingId(settlementId)
+  const chooseConfirmation = (settlement: Settlement) => {
+    uploadTarget.current = settlement
     fileInput.current?.click()
   }
 
   const uploadConfirmation = async (file: File | undefined) => {
-    if (!file || !ownerId || !uploadingId) return
-    setSubmitting(true)
+    const settlement = uploadTarget.current
+    if (!file || !ownerId || !settlement) return
+    const fingerprint = [
+      file.name,
+      file.type,
+      file.size,
+      file.lastModified,
+    ].join(':')
+    const priorAttempt = attachmentAttempts.current.get(settlement.id)
+    const attempt =
+      priorAttempt?.fingerprint === fingerprint
+        ? priorAttempt
+        : { fingerprint, key: crypto.randomUUID() }
+    attachmentAttempts.current.set(settlement.id, attempt)
+    setBusyId(settlement.id)
     setFeedback({})
     try {
-      await uploadSettlementConfirmation(ownerId, uploadingId, file)
+      await uploadSettlementConfirmation(
+        ownerId,
+        settlement.id,
+        settlement.revision,
+        file,
+        attempt.key,
+      )
+      attachmentAttempts.current.delete(settlement.id)
       setFeedback({ success: 'Private confirmation attached.' })
-      await resource.reload()
     } catch (error) {
       setFeedback({ error: error instanceof Error ? error.message : 'Could not attach confirmation.' })
     } finally {
-      setSubmitting(false)
-      setUploadingId(null)
+      uploadTarget.current = null
       if (fileInput.current) fileInput.current.value = ''
+      await resource.reload()
+      setBusyId(null)
     }
   }
 
+  const createConfirmationUrl = async (path: string) => {
+    setFeedback({})
+    return getPrivateDocumentUrl(path)
+  }
+
   const viewConfirmation = async (path: string) => {
+    const preview = window.open('', '_blank')
+    if (preview) preview.opener = null
     try {
-      const url = await getPrivateDocumentUrl(path)
-      window.open(url, '_blank', 'noopener,noreferrer')
+      const url = await createConfirmationUrl(path)
+      if (!preview) {
+        throw new Error('Allow pop-ups to open the confirmation.')
+      }
+      preview.location.replace(url)
     } catch (error) {
+      preview?.close()
       setFeedback({ error: error instanceof Error ? error.message : 'Could not open confirmation.' })
     }
   }
 
+  const copyConfirmationLink = async (path: string) => {
+    try {
+      const url = await createConfirmationUrl(path)
+      await navigator.clipboard.writeText(url)
+      setFeedback({ success: 'Private confirmation link copied. It expires in 1 minute.' })
+    } catch (error) {
+      setFeedback({
+        error: error instanceof Error ? error.message : 'Could not copy the confirmation link.',
+      })
+    }
+  }
+
+  const modalCopy = pendingTransition ? transitionCopy(pendingTransition.status) : null
+
   return (
     <ProPage
       title="Settlements"
-      description="Track who owes what and record external payment status. No balances, pooled funds, or transfers are handled here."
+      description="Track obligations and external payments. No funds or transfers are handled here."
       actions={
-        <Button
-          size="sm"
-          className="gap-2 bg-white text-poker-green hover:bg-cream"
-          onClick={() => setShowForm((value) => !value)}
-        >
-          {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        <Button size="md" className="gap-2" onClick={() => setShowForm((value) => !value)}>
+          {showForm ? <X className="size-4" /> : <Plus className="size-4" />}
           {showForm ? 'Close' : 'New obligation'}
         </Button>
       }
@@ -193,267 +289,210 @@ export function SettlementsPage() {
         ref={fileInput}
         className="sr-only"
         type="file"
+        tabIndex={-1}
+        aria-label="Choose settlement confirmation"
         accept="image/jpeg,image/png,image/webp,application/pdf"
         onChange={(event) => void uploadConfirmation(event.target.files?.[0])}
       />
       <FormFeedback {...feedback} />
 
       {showForm ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>New settlement obligation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={submit}>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Direction" required>
-                  <FormSelect
-                    value={form.direction}
-                    onChange={(event) =>
-                      setForm((value) => ({
-                        ...value,
-                        direction: event.target.value as Settlement['direction'],
-                      }))
-                    }
-                  >
-                    <option value="payable">I owe</option>
-                    <option value="receivable">Owed to me</option>
-                  </FormSelect>
-                </Field>
-                <Field label="Counterparty" required>
-                  <FormInput
-                    required
-                    maxLength={160}
-                    value={form.counterparty}
-                    onChange={(event) =>
-                      setForm((value) => ({ ...value, counterparty: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="Currency" required>
-                  <FormInput
-                    required
-                    minLength={3}
-                    maxLength={3}
-                    value={form.currency}
-                    onChange={(event) =>
-                      setForm((value) => ({ ...value, currency: event.target.value.toUpperCase() }))
-                    }
-                  />
-                </Field>
-                <MoneyField
+        <Surface>
+          <SectionHeader
+            title="New settlement obligation"
+            description="Record an amount owed outside PokerManager."
+            className="mb-4"
+          />
+          <form className="space-y-4" onSubmit={submit}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Direction" required>
+                <FormSelect
+                  value={form.direction}
+                  onChange={(event) =>
+                    setForm((value) => ({
+                      ...value,
+                      direction: event.target.value as Settlement['direction'],
+                    }))
+                  }
+                >
+                  <option value="payable">I owe</option>
+                  <option value="receivable">Owed to me</option>
+                </FormSelect>
+              </Field>
+              <Field label="Counterparty" required>
+                <FormInput
                   required
-                  currency={form.currency}
-                  value={form.amount}
-                  onChange={(amount) => setForm((value) => ({ ...value, amount }))}
-                />
-                <Field label="Reason" required>
-                  <FormInput
-                    required
-                    maxLength={250}
-                    value={form.reason}
-                    onChange={(event) => setForm((value) => ({ ...value, reason: event.target.value }))}
-                  />
-                </Field>
-                <Field label="External method" hint="Venmo, PayPal, Cash App, check">
-                  <FormInput
-                    maxLength={80}
-                    value={form.method}
-                    onChange={(event) => setForm((value) => ({ ...value, method: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Display handle / instructions">
-                  <FormInput
-                    maxLength={200}
-                    value={form.handle}
-                    onChange={(event) => setForm((value) => ({ ...value, handle: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Due date">
-                  <FormInput
-                    type="date"
-                    value={form.dueDate}
-                    onChange={(event) => setForm((value) => ({ ...value, dueDate: event.target.value }))}
-                  />
-                </Field>
-              </div>
-              <Field label="Memo / details">
-                <FormTextarea
-                  maxLength={500}
-                  value={form.memo}
-                  onChange={(event) => setForm((value) => ({ ...value, memo: event.target.value }))}
+                  maxLength={160}
+                  value={form.counterparty}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, counterparty: event.target.value }))
+                  }
                 />
               </Field>
-              <div className="flex justify-end">
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? 'Saving…' : 'Record obligation'}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+              <Field label="Currency" required>
+                <FormInput
+                  required
+                  minLength={3}
+                  maxLength={3}
+                  autoComplete="off"
+                  value={form.currency}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, currency: event.target.value.toUpperCase() }))
+                  }
+                />
+              </Field>
+              <MoneyField
+                required
+                currency={form.currency}
+                value={form.amount}
+                onChange={(amount) => setForm((value) => ({ ...value, amount }))}
+              />
+              <Field label="Reason" required>
+                <FormInput
+                  required
+                  maxLength={250}
+                  value={form.reason}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, reason: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="External method" hint="Venmo, PayPal, Cash App, or check">
+                <FormInput
+                  maxLength={80}
+                  value={form.method}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, method: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="Display handle or instructions">
+                <FormInput
+                  maxLength={200}
+                  value={form.handle}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, handle: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="Due date">
+                <FormInput
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(event) =>
+                    setForm((value) => ({ ...value, dueDate: event.target.value }))
+                  }
+                />
+              </Field>
+            </div>
+            <Field label="Memo or details">
+              <FormTextarea
+                maxLength={500}
+                value={form.memo}
+                onChange={(event) =>
+                  setForm((value) => ({ ...value, memo: event.target.value }))
+                }
+              />
+            </Field>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={submitting}>
+                {submitting ? 'Saving…' : 'Record obligation'}
+              </Button>
+            </div>
+          </form>
+        </Surface>
       ) : null}
 
-      <Card>
-        <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <CardTitle>Obligations</CardTitle>
-            <p className="text-sm text-muted">{settlements.length} shown</p>
+      <Surface>
+        <SectionHeader
+          title="Obligations"
+          description={`${settlements.length} shown`}
+          action={
+            <FormSelect
+              aria-label="Filter settlements by status"
+              className="min-w-40"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            >
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="disputed">Disputed</option>
+              <option value="void">Void</option>
+            </FormSelect>
+          }
+          className="mb-4"
+        />
+
+        {resource.loading ? <ProLoading label="Loading settlements…" /> : null}
+        {resource.error ? <ProError error={resource.error} retry={resource.reload} /> : null}
+        {!resource.loading && !resource.error && settlements.length === 0 ? (
+          <EmptyState
+            icon={<Scale className="size-6" />}
+            title={(resource.data?.length ?? 0) ? 'No matching settlements' : 'No settlements'}
+            action={<Button onClick={() => setShowForm(true)}>New obligation</Button>}
+          />
+        ) : null}
+        {settlements.length ? (
+          <div className="space-y-3">
+            {settlements.map((settlement) => (
+              <div key={settlement.id}>
+                <SettlementLedgerRow
+                  settlement={settlement}
+                  busy={busyId === settlement.id}
+                  onCopy={(value, label) => void copy(value, label)}
+                  onRequestTransition={(item, status) =>
+                    setPendingTransition({ settlement: item, status })
+                  }
+                  onChooseConfirmation={chooseConfirmation}
+                  onViewConfirmation={(path) => void viewConfirmation(path)}
+                />
+                {settlement.confirmation_path ? (
+                  <div className="-mt-px flex justify-end border border-t-0 border-rule bg-bg px-3 py-2">
+                    <Button
+                      size="sm"
+                      variant="quiet"
+                      disabled={busyId === settlement.id}
+                      onClick={() => void copyConfirmationLink(settlement.confirmation_path!)}
+                    >
+                      Copy 1-minute confirmation link
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
-          <FormSelect
-            aria-label="Filter settlements by status"
-            className="sm:max-w-44"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+        ) : null}
+      </Surface>
+
+      <Modal
+        open={pendingTransition !== null}
+        onClose={() => setPendingTransition(null)}
+        title={modalCopy?.title ?? 'Update settlement'}
+        initialFocusRef={confirmButton}
+        dismissible={busyId === null}
+      >
+        <p className="text-sm text-muted">{modalCopy?.description}</p>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busyId !== null}
+            onClick={() => setPendingTransition(null)}
           >
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="disputed">Disputed</option>
-            <option value="void">Void</option>
-          </FormSelect>
-        </CardHeader>
-        <CardContent>
-          {resource.loading ? <ProLoading label="Loading settlements…" /> : null}
-          {resource.error ? <ProError error={resource.error} retry={resource.reload} /> : null}
-          {!resource.loading && !resource.error && settlements.length === 0 ? (
-            <ProEmpty
-              title={(resource.data?.length ?? 0) ? 'No matching settlements' : 'No settlements'}
-              description="Record an external payable or receivable when reconciliation is needed."
-              action={<Button onClick={() => setShowForm(true)}>New obligation</Button>}
-            />
-          ) : null}
-          {settlements.length ? (
-            <div className="space-y-3">
-              {settlements.map((settlement) => {
-                const providerUrl = providerUrlForSettlement(settlement)
-                const details = [
-                  settlement.external_method,
-                  settlement.external_handle,
-                  settlement.memo,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
-                return (
-                  <article className="rounded-xl border border-border p-4" key={settlement.id}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="font-semibold text-ink">{settlement.counterparty}</h2>
-                          <Badge variant={settlementTone(settlement.status)}>{settlement.status}</Badge>
-                          <Badge variant={settlement.direction === 'receivable' ? 'green' : 'blue'}>
-                            {settlement.direction === 'receivable' ? 'owed to me' : 'I owe'}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-muted">{settlement.reason}</p>
-                        <p className="mt-1 text-xs text-muted">
-                          {settlement.due_date ? `Due ${formatDate(settlement.due_date)}` : 'No due date'}
-                          {details ? ` · ${details}` : ''}
-                        </p>
-                      </div>
-                      <p className="text-xl font-bold tabular-nums text-ink">
-                        {formatMinor(settlement.amount_minor, settlement.currency)}
-                      </p>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-                      {providerUrl ? (
-                        <a
-                          href={providerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-cream px-3 text-sm font-medium text-ink hover:bg-border"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                          Open provider
-                        </a>
-                      ) : null}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="gap-1.5"
-                        onClick={() =>
-                          void copy(
-                            minorToDecimal(settlement.amount_minor, settlement.currency),
-                            'Amount',
-                          )
-                        }
-                      >
-                        <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
-                        Copy amount
-                      </Button>
-                      {details ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="gap-1.5"
-                          onClick={() => void copy(details, 'Details')}
-                        >
-                          <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
-                          Copy details
-                        </Button>
-                      ) : null}
-                      {settlement.status !== 'paid' && settlement.status !== 'void' ? (
-                        <Button
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => void changeStatus(settlement, 'paid')}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          Mark paid
-                        </Button>
-                      ) : null}
-                      {settlement.status === 'pending' ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5"
-                          onClick={() => void changeStatus(settlement, 'disputed')}
-                        >
-                          <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-                          Dispute
-                        </Button>
-                      ) : null}
-                      {settlement.status === 'disputed' ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5"
-                          onClick={() => void changeStatus(settlement, 'pending')}
-                        >
-                          <Scale className="h-3.5 w-3.5" aria-hidden="true" />
-                          Return to pending
-                        </Button>
-                      ) : null}
-                      {settlement.confirmation_path ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5"
-                          onClick={() => void viewConfirmation(settlement.confirmation_path!)}
-                        >
-                          <FileCheck2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          View confirmation
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5"
-                          disabled={submitting && uploadingId === settlement.id}
-                          onClick={() => chooseConfirmation(settlement.id)}
-                        >
-                          <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
-                          Attach confirmation
-                        </Button>
-                      )}
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            Cancel
+          </Button>
+          <Button
+            ref={confirmButton}
+            type="button"
+            variant={pendingTransition?.status === 'void' ? 'destructive' : 'primary'}
+            disabled={busyId !== null}
+            onClick={() => void confirmTransition()}
+          >
+            {busyId ? 'Saving…' : modalCopy?.action}
+          </Button>
+        </div>
+      </Modal>
     </ProPage>
   )
 }

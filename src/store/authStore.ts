@@ -2,6 +2,12 @@ import { create } from 'zustand'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { env } from '../lib/env'
+import { queryClient } from '../lib/queryClient'
+import {
+  clearLegacyUnscopedOfflineState,
+  clearOfflineStateForUser,
+  setOfflineStorageUser,
+} from '../lib/offlineQueue'
 
 interface AuthState {
   user: User | null
@@ -14,6 +20,35 @@ interface AuthState {
   initialize: () => Promise<void>
 }
 
+let scopedUserId: string | null = null
+let authListenerRegistered = false
+
+async function transitionClientScope(nextUserId: string | null) {
+  const previousUserId = scopedUserId
+  if (previousUserId === nextUserId) {
+    setOfflineStorageUser(nextUserId)
+    await clearLegacyUnscopedOfflineState()
+    return
+  }
+
+  if (previousUserId) {
+    try {
+      await clearOfflineStateForUser(previousUserId)
+    } catch {
+      // Switching the scoped key still prevents the next account from reading
+      // prior data if IndexedDB cleanup is temporarily unavailable.
+    }
+  }
+  queryClient.clear()
+  scopedUserId = nextUserId
+  setOfflineStorageUser(nextUserId)
+  try {
+    await clearLegacyUnscopedOfflineState()
+  } catch {
+    // Legacy keys are never read by the scoped queue implementation.
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   loading: false,
@@ -21,11 +56,23 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initialize: async () => {
     const { data: { session } } = await supabase.auth.getSession()
+    await transitionClientScope(session?.user.id ?? null)
     set({ user: session?.user ?? null, initialized: true })
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ user: session?.user ?? null })
-    })
+    if (!authListenerRegistered) {
+      authListenerRegistered = true
+      supabase.auth.onAuthStateChange((_event, nextSession) => {
+        const nextUser = nextSession?.user ?? null
+        void transitionClientScope(nextUser?.id ?? null)
+          .then(() => set({ user: nextUser }))
+          .catch(() => {
+            queryClient.clear()
+            scopedUserId = nextUser?.id ?? null
+            setOfflineStorageUser(scopedUserId)
+            set({ user: nextUser })
+          })
+      })
+    }
   },
 
   signIn: async (email, password) => {
@@ -65,6 +112,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
+    await transitionClientScope(null)
     set({ user: null })
   },
 }))

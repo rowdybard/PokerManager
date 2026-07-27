@@ -105,11 +105,11 @@ export function ProfessionalCalendarPage() {
   return (
     <ProPage
       title="Professional calendar"
-      description="Coordinate sessions, tournament series, registration deadlines, travel, study, and bankroll exposure."
+      description="Schedule sessions, deadlines, travel, and study."
       actions={
         <Button
-          size="sm"
-          className="gap-2 bg-white text-poker-green hover:bg-cream"
+          size="md"
+          className="gap-2"
           onClick={() => setShowForm((value) => !value)}
         >
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}

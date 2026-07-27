@@ -16,10 +16,15 @@ export function formatCurrency(amount: number): string {
 
 export function formatDate(date: string | null): string {
   if (!date) return '—'
-  return new Date(date).toLocaleDateString('en-US', {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const parsed = dateOnly
+    ? new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])))
+    : new Date(date)
+  return parsed.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    ...(dateOnly ? { timeZone: 'UTC' } : {}),
   })
 }
 

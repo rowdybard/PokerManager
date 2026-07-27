@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Calculator, Handshake, Plus, Scale, X } from 'lucide-react'
 import { Link } from 'react-router'
 import { Badge } from '../../components/ui/Badge'
@@ -21,7 +21,7 @@ import { useAuthStore } from '../../store/authStore'
 import {
   createStakingAllocation,
   createStakingDeal,
-  decimalToMinor,
+  decimalToMinorExact,
   formatDate,
   formatMinor,
   listCareerSessions,
@@ -49,6 +49,7 @@ export function StakingPage() {
   const [panel, setPanel] = useState<'deal' | 'allocation' | null>(null)
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const [submitting, setSubmitting] = useState(false)
+  const mutationKeys = useRef(new Map<string, string>())
   const [deal, setDeal] = useState({
     name: '',
     backer: '',
@@ -71,10 +72,16 @@ export function StakingPage() {
 
   const selectedDeal = resource.data?.deals.find((item) => item.id === allocation.dealId)
   const selectedSession = resource.data?.sessions.find((item) => item.id === allocation.sessionId)
+  const activeDeals = useMemo(
+    () => (resource.data?.deals ?? []).filter((item) => item.status === 'active'),
+    [resource.data?.deals],
+  )
   const splitPreview = useMemo(() => {
     if (!selectedDeal || !allocation.totalResult) return null
     try {
-      const result = BigInt(decimalToMinor(allocation.totalResult, selectedDeal.currency))
+      const result = BigInt(
+        decimalToMinorExact(allocation.totalResult, selectedDeal.currency),
+      )
       const makeupBefore = BigInt(selectedDeal.makeup_minor)
       if (result <= 0n) {
         return {
@@ -117,7 +124,7 @@ export function StakingPage() {
         player_share_bps: playerShare,
         backer_share_bps: 10_000 - playerShare,
         markup_bps: markup,
-        makeup_minor: decimalToMinor(deal.makeup || '0', deal.currency),
+        makeup_minor: decimalToMinorExact(deal.makeup || '0', deal.currency),
         currency: deal.currency,
         starts_on: deal.startsOn,
         ends_on: deal.endsOn || null,
@@ -159,24 +166,46 @@ export function StakingPage() {
     setSubmitting(true)
     setFeedback({})
     try {
-      await createStakingAllocation(ownerId, {
+      const allocatedBuyInMinor = decimalToMinorExact(
+        allocation.allocatedBuyIn ||
+          minorToDecimal(selectedSession.buy_in_minor, selectedSession.currency),
+        selectedDeal.currency,
+      )
+      const totalResultMinor = decimalToMinorExact(
+        allocation.totalResult,
+        selectedDeal.currency,
+      )
+      const notes = allocation.notes.trim() || null
+      const fingerprint = JSON.stringify([
+        'staking-allocation',
+        ownerId,
+        selectedDeal.id,
+        selectedSession.id,
+        allocatedBuyInMinor,
+        totalResultMinor,
+        selectedDeal.makeup_minor,
+        notes,
+      ])
+      const idempotencyKey = mutationKeys.current.get(fingerprint) ?? crypto.randomUUID()
+      mutationKeys.current.set(fingerprint, idempotencyKey)
+      const result = await createStakingAllocation(ownerId, {
         deal_id: selectedDeal.id,
         session_id: selectedSession.id,
-        allocated_buy_in_minor: decimalToMinor(
-          allocation.allocatedBuyIn || minorToDecimal(selectedSession.buy_in_minor, selectedSession.currency),
-          selectedDeal.currency,
-        ),
-        backer_result_minor: splitPreview.backer,
-        player_result_minor: splitPreview.player,
-        settled_at: null,
-        notes: [
-          allocation.notes.trim(),
-          `Makeup waterfall: ${splitPreview.makeupBefore} -> ${splitPreview.makeupAfter} minor units.`,
-        ].filter(Boolean).join(' · '),
+        allocated_buy_in_minor: allocatedBuyInMinor,
+        total_result_minor: totalResultMinor,
+        expected_makeup_minor: selectedDeal.makeup_minor,
+        notes,
+        idempotency_key: idempotencyKey,
       })
+      mutationKeys.current.delete(fingerprint)
       setAllocation({ dealId: selectedDeal.id, sessionId: '', allocatedBuyIn: '', totalResult: '', notes: '' })
       setPanel(null)
-      setFeedback({ success: 'Session allocation and split recorded.' })
+      setFeedback({
+        success: `Session allocation recorded. Makeup is now ${formatMinor(
+          result.makeup_after_minor,
+          result.deal.currency,
+        )}.`,
+      })
       await resource.reload()
     } catch (error) {
       setFeedback({ error: error instanceof Error ? error.message : 'Could not allocate session.' })
@@ -188,21 +217,21 @@ export function StakingPage() {
   return (
     <ProPage
       title="Staking"
-      description="Document backer terms, makeup, event allocations, and calculated profit splits."
+      description="Track terms, makeup, session allocations, and splits."
       actions={
         <>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
-            disabled={(resource.data?.deals.length ?? 0) === 0 || (resource.data?.sessions.length ?? 0) === 0}
+            size="md"
+            className="gap-2"
+            disabled={activeDeals.length === 0 || (resource.data?.sessions.length ?? 0) === 0}
             onClick={() => setPanel(panel === 'allocation' ? null : 'allocation')}
           >
             <Calculator className="h-4 w-4" aria-hidden="true" />
             Allocate session
           </Button>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
+            size="md"
+            className="gap-2"
             onClick={() => setPanel(panel === 'deal' ? null : 'deal')}
           >
             {panel === 'deal' ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -272,7 +301,7 @@ export function StakingPage() {
                 <Field label="Deal" required>
                   <FormSelect required value={allocation.dealId} onChange={(event) => setAllocation((value) => ({ ...value, dealId: event.target.value }))}>
                     <option value="">Choose deal</option>
-                    {(resource.data?.deals ?? []).filter((item) => item.status === 'active').map((item) => <option key={item.id} value={item.id}>{item.name} · {item.currency}</option>)}
+                    {activeDeals.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.currency}</option>)}
                   </FormSelect>
                 </Field>
                 <Field label="Session" required>
@@ -373,7 +402,7 @@ export function StakingPage() {
                   })}
                 </div>
               ) : (
-                <ProEmpty title="No allocations" description="Allocate a recorded career session to an active deal." action={resource.data.deals.length && resource.data.sessions.length ? <Button onClick={() => setPanel('allocation')}>Allocate session</Button> : undefined} />
+                <ProEmpty title="No allocations" description="Allocate a recorded career session to an active deal." action={activeDeals.length && resource.data.sessions.length ? <Button onClick={() => setPanel('allocation')}>Allocate session</Button> : undefined} />
               )}
             </CardContent>
           </Card>

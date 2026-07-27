@@ -42,7 +42,7 @@ export function FormTextarea({ className, ...props }: TextareaHTMLAttributes<HTM
   return (
     <textarea
       className={cn(
-        'min-h-24 w-full resize-y rounded-lg border border-border bg-white px-3.5 py-2 text-base text-ink placeholder:text-muted focus-visible:border-gold/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-50',
+        'min-h-24 w-full resize-y rounded-sm border border-border bg-white px-3.5 py-2 text-base text-ink placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}
@@ -68,7 +68,7 @@ export function MoneyField({
   return (
     <Field label={label} required={required}>
       <div className="flex">
-        <span className="inline-flex min-w-14 items-center justify-center rounded-l-lg border border-r-0 border-border bg-cream px-2 text-xs font-semibold text-muted">
+        <span className="inline-flex min-w-14 items-center justify-center rounded-l-sm border border-r-0 border-border bg-cream px-2 text-xs font-semibold text-muted">
           {currency}
         </span>
         <Input
@@ -97,8 +97,10 @@ export function FormFeedback({
   return (
     <p
       className={cn(
-        'rounded-lg px-3 py-2 text-sm',
-        error ? 'bg-danger/10 text-danger' : 'bg-poker-green/10 text-poker-green',
+        'border-l-4 px-3 py-2 text-sm',
+        error
+          ? 'border-danger bg-danger/10 text-danger'
+          : 'border-success bg-poker-green/10 text-poker-green',
       )}
       role={error ? 'alert' : 'status'}
     >

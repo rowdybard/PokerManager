@@ -1,16 +1,23 @@
-import { Outlet, Link } from 'react-router'
-import { Spade } from 'lucide-react'
+import { Outlet } from 'react-router'
+import { BrandLockup } from './BrandLockup'
 
 export function AuthLayout() {
   return (
-    <div className="min-h-screen bg-bg flex flex-col items-center justify-center px-5">
-      <Link to="/login" className="mb-10 flex items-center gap-2.5">
-        <Spade className="h-9 w-9 text-gold" />
-        <span className="text-2xl font-bold text-ink">Poker Manager</span>
-      </Link>
-      <div className="w-full max-w-sm">
-        <Outlet />
-      </div>
+    <div className="flex min-h-screen flex-col bg-bg">
+      <header className="border-b border-gold-leaf/50 bg-felt px-4 py-3">
+        <div className="mx-auto w-full max-w-md">
+          <BrandLockup to="/login" inverse />
+        </div>
+      </header>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto flex w-full max-w-md flex-1 items-center px-4 py-8 outline-none sm:px-5"
+      >
+        <div className="w-full">
+          <Outlet />
+        </div>
+      </main>
     </div>
   )
 }

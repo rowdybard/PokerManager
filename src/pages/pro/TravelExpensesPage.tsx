@@ -18,6 +18,7 @@ import {
 } from '../../components/pro'
 import { useAuthStore } from '../../store/authStore'
 import {
+  calculateTripSpend,
   createCareerExpense,
   createTrip,
   decimalToMinor,
@@ -26,7 +27,6 @@ import {
   getPrivateDocumentUrl,
   listCareerExpenses,
   listTrips,
-  sumMinor,
   todayInputValue,
   uploadExpenseReceipt,
   type CareerExpense,
@@ -70,13 +70,14 @@ export function TravelExpensesPage() {
   })
 
   const tripSpend = useMemo(() => {
-    const grouped = new Map<string, string>()
-    for (const item of resource.data?.expenses ?? []) {
-      if (!item.trip_id) continue
-      grouped.set(item.trip_id, sumMinor([grouped.get(item.trip_id) ?? '0', item.amount_minor]))
-    }
-    return grouped
-  }, [resource.data?.expenses])
+    const expenses = resource.data?.expenses ?? []
+    return new Map(
+      (resource.data?.trips ?? []).map((item) => [
+        item.id,
+        calculateTripSpend(expenses, item.id, item.currency),
+      ]),
+    )
+  }, [resource.data])
 
   const saveTrip = async (event: FormEvent) => {
     event.preventDefault()
@@ -115,6 +116,14 @@ export function TravelExpensesPage() {
   const saveExpense = async (event: FormEvent) => {
     event.preventDefault()
     if (!ownerId) return
+    const selectedTrip = expense.tripId
+      ? resource.data?.trips.find((item) => item.id === expense.tripId)
+      : null
+    if (expense.tripId && !selectedTrip) {
+      setFeedback({ error: 'Choose an available trip.' })
+      return
+    }
+    const currency = selectedTrip?.currency ?? expense.currency
     setSubmitting(true)
     setFeedback({})
     try {
@@ -123,8 +132,8 @@ export function TravelExpensesPage() {
         session_id: null,
         category: expense.category,
         merchant: expense.merchant.trim() || null,
-        amount_minor: decimalToMinor(expense.amount, expense.currency),
-        currency: expense.currency,
+        amount_minor: decimalToMinor(expense.amount, currency),
+        currency,
         incurred_on: expense.incurredOn,
         deductible: expense.deductible,
         notes: expense.notes.trim() || null,
@@ -134,7 +143,7 @@ export function TravelExpensesPage() {
         category: 'travel',
         merchant: '',
         amount: '',
-        currency: 'USD',
+        currency,
         incurredOn: todayInputValue(),
         deductible: false,
         notes: '',
@@ -172,10 +181,17 @@ export function TravelExpensesPage() {
   }
 
   const viewReceipt = async (path: string) => {
+    const receiptWindow = window.open('', '_blank')
+    if (!receiptWindow) {
+      setFeedback({ error: 'Allow pop-ups to open the private receipt.' })
+      return
+    }
+    receiptWindow.opener = null
     try {
       const url = await getPrivateDocumentUrl(path)
-      window.open(url, '_blank', 'noopener,noreferrer')
+      receiptWindow.location.replace(url)
     } catch (error) {
+      receiptWindow.close()
       setFeedback({ error: error instanceof Error ? error.message : 'Could not open receipt.' })
     }
   }
@@ -183,20 +199,20 @@ export function TravelExpensesPage() {
   return (
     <ProPage
       title="Travel & expenses"
-      description="Plan poker trips, capture business costs, and keep private receipt evidence ready for reports."
+      description="Track trips, expenses, and receipts."
       actions={
         <>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
+            size="md"
+            className="gap-2"
             onClick={() => setPanel(panel === 'expense' ? null : 'expense')}
           >
             <ReceiptText className="h-4 w-4" aria-hidden="true" />
             Expense
           </Button>
           <Button
-            size="sm"
-            className="gap-2 bg-white text-poker-green hover:bg-cream"
+            size="md"
+            className="gap-2"
             onClick={() => setPanel(panel === 'trip' ? null : 'trip')}
           >
             {panel === 'trip' ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -209,6 +225,8 @@ export function TravelExpensesPage() {
         ref={fileInput}
         className="sr-only"
         type="file"
+        tabIndex={-1}
+        aria-label="Choose expense receipt"
         accept="image/jpeg,image/png,image/webp,application/pdf"
         onChange={(event) => void uploadReceipt(event.target.files?.[0])}
       />
@@ -292,9 +310,15 @@ export function TravelExpensesPage() {
                 <Field label="Trip">
                   <FormSelect
                     value={expense.tripId}
-                    onChange={(event) =>
-                      setExpense((value) => ({ ...value, tripId: event.target.value }))
-                    }
+                    onChange={(event) => {
+                      const tripId = event.target.value
+                      const selectedTrip = resource.data?.trips.find((item) => item.id === tripId)
+                      setExpense((value) => ({
+                        ...value,
+                        tripId,
+                        currency: selectedTrip?.currency ?? value.currency,
+                      }))
+                    }}
                   >
                     <option value="">No trip</option>
                     {(resource.data?.trips ?? []).map((item) => (
@@ -339,11 +363,16 @@ export function TravelExpensesPage() {
                     }
                   />
                 </Field>
-                <Field label="Currency" required>
+                <Field
+                  label="Currency"
+                  hint={expense.tripId ? 'Matches the selected trip.' : undefined}
+                  required
+                >
                   <FormInput
                     required
                     minLength={3}
                     maxLength={3}
+                    readOnly={Boolean(expense.tripId)}
                     value={expense.currency}
                     onChange={(event) =>
                       setExpense((value) => ({ ...value, currency: event.target.value.toUpperCase() }))
@@ -395,7 +424,10 @@ export function TravelExpensesPage() {
               {resource.data.trips.length ? (
                 <div className="space-y-3">
                   {resource.data.trips.map((item) => {
-                    const spend = tripSpend.get(item.id) ?? '0'
+                    const spend = tripSpend.get(item.id) ?? {
+                      amountMinor: '0',
+                      excludedCurrencyCount: 0,
+                    }
                     return (
                       <article className="rounded-xl border border-border p-4" key={item.id}>
                         <div className="flex items-start gap-3">
@@ -408,11 +440,17 @@ export function TravelExpensesPage() {
                               {item.destination ? ` · ${item.destination}` : ''}
                             </p>
                             <p className="mt-2 text-sm tabular-nums text-ink">
-                              Spent <strong>{formatMinor(spend, item.currency)}</strong>
+                              Spent <strong>{formatMinor(spend.amountMinor, item.currency)}</strong>
                               {item.budget_minor
                                 ? ` of ${formatMinor(item.budget_minor, item.currency)}`
                                 : ''}
                             </p>
+                            {spend.excludedCurrencyCount ? (
+                              <Badge className="mt-2" variant="red">
+                                {spend.excludedCurrencyCount} mixed-currency expense
+                                {spend.excludedCurrencyCount === 1 ? '' : 's'} excluded
+                              </Badge>
+                            ) : null}
                           </div>
                         </div>
                       </article>

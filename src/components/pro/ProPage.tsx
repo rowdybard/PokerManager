@@ -1,32 +1,5 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router'
-import {
-  BarChart3,
-  BookOpenCheck,
-  CalendarDays,
-  Landmark,
-  ListChecks,
-  Plane,
-  ReceiptText,
-  Scale,
-  ShieldCheck,
-  WalletCards,
-} from 'lucide-react'
-import { PRO_ROUTES } from '../../lib/pro'
-import { cn } from '../../lib/utils'
-
-const routeIcons = [
-  BarChart3,
-  ListChecks,
-  WalletCards,
-  ReceiptText,
-  Plane,
-  Scale,
-  CalendarDays,
-  BookOpenCheck,
-  Landmark,
-  ShieldCheck,
-] as const
+import { SectionHeader } from '../ui/SectionHeader'
 
 interface ProPageProps {
   title: string
@@ -37,45 +10,20 @@ interface ProPageProps {
 
 export function ProPage({ title, description, actions, children }: ProPageProps) {
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-poker-green/20 bg-poker-green text-white shadow-sm">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold-light">
-              My Poker
-            </p>
-            <h1 className="text-2xl font-bold sm:text-3xl">{title}</h1>
-            <p className="mt-1 max-w-2xl text-sm text-white/75">{description}</p>
-          </div>
-          {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
-        </div>
-        <nav
-          aria-label="Professional poker sections"
-          className="flex gap-1 overflow-x-auto border-t border-white/10 px-3 py-2"
-        >
-          {PRO_ROUTES.map((route, index) => {
-            const Icon = routeIcons[index]
-            return (
-              <NavLink
-                key={route.path}
-                to={route.path}
-                end={route.path === '/pro'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex min-w-fit items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors',
-                    isActive
-                      ? 'bg-white text-poker-green shadow-sm'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white',
-                  )
-                }
-              >
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {route.label}
-              </NavLink>
-            )
-          })}
-        </nav>
-      </section>
+    <div className="space-y-5 [&_.rounded-xl]:rounded-sm [&_.rounded-2xl]:rounded-sm [&_.shadow-sm]:shadow-none">
+      <SectionHeader
+        headingLevel={1}
+        title={title}
+        description={description}
+        className="items-stretch pb-4 sm:items-end [&>div:last-child]:w-full sm:[&>div:last-child]:w-auto"
+        action={
+          actions ? (
+            <div className="flex w-full flex-col gap-2 min-[420px]:flex-row sm:w-auto [&>*]:w-full min-[420px]:[&>*]:w-auto [&_button]:min-h-11 [&_button]:w-full [&_button]:gap-2 [&_button]:px-4 [&_button]:text-sm min-[420px]:[&_button]:w-auto [&_select]:min-h-11">
+              {actions}
+            </div>
+          ) : undefined
+        }
+      />
       {children}
     </div>
   )

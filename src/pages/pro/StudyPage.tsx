@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { BookOpenCheck, Check, Flag, Plus, Target, X } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -56,6 +56,12 @@ export function StudyPage() {
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const [reviewFilter, setReviewFilter] = useState<'all' | PokerHand['review_status']>('queued')
   const [goalValues, setGoalValues] = useState<Record<string, string>>({})
+  const [handMutations, setHandMutations] = useState<Record<string, PokerHand['review_status']>>({})
+  const [goalMutations, setGoalMutations] = useState<Record<string, 'update' | 'complete'>>({})
+  const [handErrors, setHandErrors] = useState<Record<string, string>>({})
+  const [goalErrors, setGoalErrors] = useState<Record<string, string>>({})
+  const handMutationLocks = useRef(new Set<string>())
+  const goalMutationLocks = useRef(new Set<string>())
   const [hand, setHand] = useState({
     source: 'manual' as PokerHand['source'],
     playedAt: localDateTimeInputValue(),
@@ -226,38 +232,75 @@ export function StudyPage() {
   }
 
   const changeHandStatus = async (item: PokerHand, reviewStatus: PokerHand['review_status']) => {
-    if (!ownerId) return
+    if (!ownerId || handMutationLocks.current.has(item.id)) return
+    handMutationLocks.current.add(item.id)
+    setHandMutations((values) => ({ ...values, [item.id]: reviewStatus }))
+    setHandErrors((values) => {
+      const next = { ...values }
+      delete next[item.id]
+      return next
+    })
+    setFeedback({})
     try {
       await updateHandReviewStatus(ownerId, item.id, reviewStatus)
-      setFeedback({ success: `Hand marked ${reviewStatus}.` })
       await resource.reload()
+      setFeedback({ success: `Hand marked ${reviewStatus}.` })
     } catch (error) {
-      setFeedback({ error: error instanceof Error ? error.message : 'Could not update hand.' })
+      setHandErrors((values) => ({
+        ...values,
+        [item.id]: error instanceof Error ? error.message : 'Could not update hand.',
+      }))
+    } finally {
+      handMutationLocks.current.delete(item.id)
+      setHandMutations((values) => {
+        const next = { ...values }
+        delete next[item.id]
+        return next
+      })
     }
   }
 
   const updateGoalProgress = async (item: CareerGoal, status = item.status) => {
-    if (!ownerId) return
+    if (!ownerId || goalMutationLocks.current.has(item.id)) return
+    const mutation = status === 'completed' && item.status !== 'completed' ? 'complete' : 'update'
+    goalMutationLocks.current.add(item.id)
+    setGoalMutations((values) => ({ ...values, [item.id]: mutation }))
+    setGoalErrors((values) => {
+      const next = { ...values }
+      delete next[item.id]
+      return next
+    })
+    setFeedback({})
     try {
       await updateCareerGoal(ownerId, item.id, {
         current_value: goalValues[item.id] ?? item.current_value,
         status,
       })
-      setFeedback({ success: status === 'completed' ? 'Goal completed.' : 'Goal progress updated.' })
       await resource.reload()
+      setFeedback({ success: mutation === 'complete' ? 'Goal completed.' : 'Goal progress updated.' })
     } catch (error) {
-      setFeedback({ error: error instanceof Error ? error.message : 'Could not update goal.' })
+      setGoalErrors((values) => ({
+        ...values,
+        [item.id]: error instanceof Error ? error.message : 'Could not update goal.',
+      }))
+    } finally {
+      goalMutationLocks.current.delete(item.id)
+      setGoalMutations((values) => {
+        const next = { ...values }
+        delete next[item.id]
+        return next
+      })
     }
   }
 
   return (
     <ProPage
       title="Hands & study"
-      description="Build a private review queue, log deliberate study, track opponent aliases, and measure career goals."
+      description="Review hands, log study, and track goals."
       actions={
         <Button
-          size="sm"
-          className="gap-2 bg-white text-poker-green hover:bg-cream"
+          size="md"
+          className="gap-2"
           onClick={() => setShowForm((value) => !value)}
         >
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -433,7 +476,11 @@ export function StudyPage() {
             {hands.length ? (
               <div className="space-y-3">
                 {hands.map((item) => (
-                  <article className="rounded-xl border border-border p-4" key={item.id}>
+                  <article
+                    aria-busy={Boolean(handMutations[item.id])}
+                    className="rounded-xl border border-border p-4"
+                    key={item.id}
+                  >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -448,9 +495,29 @@ export function StudyPage() {
                     <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-cream p-3 text-xs text-ink">{item.hand_history}</pre>
                     {item.notes ? <p className="mt-2 text-sm text-muted">{item.notes}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {item.review_status === 'queued' ? <Button size="sm" className="gap-1" onClick={() => void changeHandStatus(item, 'reviewed')}><Check className="h-3.5 w-3.5" />Mark reviewed</Button> : null}
-                      {item.review_status !== 'archived' ? <Button size="sm" variant="ghost" onClick={() => void changeHandStatus(item, 'archived')}>Archive</Button> : null}
+                      {item.review_status === 'queued' ? (
+                        <Button
+                          size="sm"
+                          className="gap-1"
+                          disabled={Boolean(handMutations[item.id])}
+                          onClick={() => void changeHandStatus(item, 'reviewed')}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          {handMutations[item.id] === 'reviewed' ? 'Marking reviewed…' : 'Mark reviewed'}
+                        </Button>
+                      ) : null}
+                      {item.review_status !== 'archived' ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={Boolean(handMutations[item.id])}
+                          onClick={() => void changeHandStatus(item, 'archived')}
+                        >
+                          {handMutations[item.id] === 'archived' ? 'Archiving…' : 'Archive'}
+                        </Button>
+                      ) : null}
                     </div>
+                    {handErrors[item.id] ? <p className="mt-2 text-sm text-red-700" role="alert">{handErrors[item.id]}</p> : null}
                   </article>
                 ))}
               </div>
@@ -480,27 +547,36 @@ export function StudyPage() {
       ) : null}
 
       {resource.data && tab === 'goals' ? (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <section className="divide-y divide-rule border border-rule bg-ivory" aria-label="Career goals">
           {resource.data.goals.map((item) => {
             const current = Number(goalValues[item.id] ?? item.current_value ?? 0)
             const target = Number(item.target_value ?? 0)
             const progress = target > 0 ? Math.min(100, Math.max(0, (current / target) * 100)) : 0
+            const mutation = goalMutations[item.id]
             return (
-              <Card key={item.id}>
+              <article key={item.id} className="p-4" aria-busy={Boolean(mutation)}>
                 <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-ink">{item.title}</h2><p className="text-xs text-muted">{item.metric || 'Career goal'} · {item.due_on ? `Due ${formatDate(item.due_on)}` : 'Ongoing'}</p></div><Badge variant={item.status === 'completed' ? 'green' : item.status === 'active' ? 'gold' : 'default'}>{item.status}</Badge></div>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-cream"><div className="h-full rounded-full bg-poker-green" style={{ width: `${progress}%` }} /></div>
+                <div
+                  className="mt-4 h-2 overflow-hidden rounded-full bg-cream"
+                  role="progressbar"
+                  aria-label={item.title}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(progress)}
+                ><div className="h-full rounded-full bg-poker-green" style={{ width: `${progress}%` }} /></div>
                 <div className="mt-3 flex items-end gap-2">
-                  <div className="min-w-0 flex-1"><Field label={`Progress${item.target_value ? ` / ${item.target_value}` : ''}`}><FormInput type="number" step="any" value={goalValues[item.id] ?? item.current_value ?? ''} onChange={(event) => setGoalValues((values) => ({ ...values, [item.id]: event.target.value }))} /></Field></div>
-                  <Button size="sm" variant="secondary" onClick={() => void updateGoalProgress(item)}>Update</Button>
-                  {item.status === 'active' ? <Button size="sm" className="gap-1" onClick={() => void updateGoalProgress(item, 'completed')}><Flag className="h-3.5 w-3.5" />Done</Button> : null}
+                  <div className="min-w-0 flex-1"><Field label={`Progress${item.target_value ? ` / ${item.target_value}` : ''}`}><FormInput type="number" step="any" disabled={Boolean(mutation)} value={goalValues[item.id] ?? item.current_value ?? ''} onChange={(event) => setGoalValues((values) => ({ ...values, [item.id]: event.target.value }))} /></Field></div>
+                  <Button size="sm" variant="secondary" className="min-h-11" disabled={Boolean(mutation)} onClick={() => void updateGoalProgress(item)}>{mutation === 'update' ? 'Updating…' : 'Update'}</Button>
+                  {item.status === 'active' ? <Button size="sm" className="min-h-11 gap-1" disabled={Boolean(mutation)} onClick={() => void updateGoalProgress(item, 'completed')}><Flag className="h-3.5 w-3.5" aria-hidden="true" />{mutation === 'complete' ? 'Completing…' : 'Done'}</Button> : null}
                 </div>
-              </Card>
+                {goalErrors[item.id] ? <p className="mt-2 text-sm text-red-700" role="alert">{goalErrors[item.id]}</p> : null}
+              </article>
             )
           })}
           {resource.data.goals.length === 0 ? (
-            <div className="lg:col-span-2"><ProEmpty title="No career goals" description="Set volume, study, financial, or performance targets." action={<Button onClick={() => openForm('goals')}><Target className="mr-2 h-4 w-4" />Set goal</Button>} /></div>
+            <ProEmpty title="No career goals" description="Set a volume, study, financial, or performance target." action={<Button onClick={() => openForm('goals')}><Target className="mr-2 h-4 w-4" aria-hidden="true" />Set goal</Button>} />
           ) : null}
-        </div>
+        </section>
       ) : null}
     </ProPage>
   )

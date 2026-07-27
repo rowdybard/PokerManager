@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Download, FileSpreadsheet, Printer, ShieldCheck } from 'lucide-react'
+import { Download, FileSpreadsheet, Printer } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import {
@@ -165,7 +165,7 @@ export function ExportsPage() {
   return (
     <ProPage
       title="Reports & exports"
-      description="Create monthly, annual, or all-time records for analysis, bookkeeping, and professional review."
+      description="Export career records by reporting period."
     >
       <FormFeedback {...feedback} />
       <Card>
@@ -209,7 +209,10 @@ export function ExportsPage() {
       {resource.loading ? <ProLoading label="Preparing export data…" /> : null}
       {resource.error ? <ProError error={resource.error} retry={resource.reload} /> : null}
       {filtered ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section
+          className="grid border border-rule bg-ivory sm:grid-cols-2 xl:grid-cols-4"
+          aria-label="Available exports"
+        >
           <ExportCard title="Career sessions" count={filtered.sessions.length} onExport={() => exportCsv('Career sessions', filtered.sessions)} />
           <ExportCard title="Bankroll ledger" count={filtered.ledger.length} onExport={() => exportCsv('Bankroll ledger', filtered.ledger)} />
           <ExportCard title="Expenses" count={filtered.expenses.length} onExport={() => exportCsv('Expenses', filtered.expenses)} />
@@ -221,18 +224,6 @@ export function ExportsPage() {
         </section>
       ) : null}
 
-      <Card className="border-poker-green/20 bg-poker-green/5">
-        <div className="flex items-start gap-3">
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-poker-green" aria-hidden="true" />
-          <div>
-            <h2 className="font-semibold text-ink">Private export</h2>
-            <p className="mt-1 text-sm text-muted">
-              Files are generated in this browser from data already authorized for the signed-in owner.
-              Review any export before sharing it with an accountant, backer, or coach.
-            </p>
-          </div>
-        </div>
-      </Card>
     </ProPage>
   )
 }
@@ -247,7 +238,7 @@ function ExportCard({
   onExport: () => void
 }) {
   return (
-    <Card>
+    <article className="border-b border-rule p-4 last:border-b-0 sm:border-r xl:border-b-0 xl:last:border-r-0">
       <div className="flex items-start justify-between gap-3">
         <FileSpreadsheet className="h-5 w-5 text-gold" aria-hidden="true" />
         <span className="text-sm font-semibold tabular-nums text-muted">{count}</span>
@@ -257,6 +248,6 @@ function ExportCard({
         <Download className="h-3.5 w-3.5" aria-hidden="true" />
         Download CSV
       </Button>
-    </Card>
+    </article>
   )
 }

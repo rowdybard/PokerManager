@@ -91,7 +91,9 @@ export interface Settlement {
   status: SettlementStatus
   paid_at: string | null
   confirmation_path: string | null
+  revision: number
   created_at: string
+  updated_at: string
 }
 
 export interface PokerTrip {
@@ -151,6 +153,13 @@ export interface StakingAllocation {
   settled_at: string | null
   notes: string | null
   created_at: string
+}
+
+export interface StakingAllocationResult {
+  allocation: StakingAllocation
+  deal: StakingDeal
+  makeup_before_minor: string
+  makeup_after_minor: string
 }
 
 export interface ProfessionalCalendarEvent {
@@ -247,6 +256,7 @@ export interface PlaidStatus {
   enabled: true
   environment: 'sandbox' | 'development' | 'production'
   readOnly: true
+  connections: PlaidConnection[]
 }
 
 export interface CareerSessionInput {
@@ -370,6 +380,33 @@ function throwIfError(error: QueryError | null): void {
   throw new Error(details || 'The database request failed.')
 }
 
+const DATABASE_PAGE_SIZE = 1_000
+
+async function collectQueryPages<Row>(
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: Row[] | null; error: QueryError | null }>,
+  maximum?: number,
+): Promise<Row[]> {
+  if (maximum !== undefined && (!Number.isSafeInteger(maximum) || maximum < 0)) {
+    throw new Error('The requested record limit is invalid.')
+  }
+  if (maximum === 0) return []
+
+  const rows: Row[] = []
+  while (maximum === undefined || rows.length < maximum) {
+    const remaining = maximum === undefined ? DATABASE_PAGE_SIZE : maximum - rows.length
+    const pageSize = Math.min(DATABASE_PAGE_SIZE, remaining)
+    const { data, error } = await fetchPage(rows.length, rows.length + pageSize - 1)
+    throwIfError(error)
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < pageSize) break
+  }
+  return rows
+}
+
 function normalizeCurrency(currency: string): CurrencyCode {
   const normalized = currency.trim().toUpperCase()
   if (!/^[A-Z]{3}$/.test(normalized)) {
@@ -454,6 +491,21 @@ export function decimalToMinor(value: string, currency: string): string {
   return (minor * sign).toString()
 }
 
+export function decimalToMinorExact(value: string, currency: string): string {
+  const digits = currencyMinorDigits(currency)
+  const cleaned = value.trim().replaceAll(',', '')
+  const match = /^(-)?(\d+)(?:\.(\d*))?$/.exec(cleaned)
+  if (!match) throw new Error('Enter a valid monetary amount.')
+  if ((match[3] ?? '').length > digits) {
+    throw new Error(
+      digits === 0
+        ? `${normalizeCurrency(currency)} does not use decimal minor units.`
+        : `Use no more than ${digits} decimal places for ${normalizeCurrency(currency)}.`,
+    )
+  }
+  return decimalToMinor(cleaned, currency)
+}
+
 export function minorToDecimal(value: string | number | bigint, currency: string): string {
   const digits = currencyMinorDigits(currency)
   const minor = BigInt(normalizeMinor(value))
@@ -523,6 +575,34 @@ export function getAccountBalance(account: BankrollAccount, entries: LedgerEntry
     (entry) => entry.account_id === account.id && entry.currency === account.currency,
   )
   return sumMinor([account.opening_balance_minor, ...accountEntries.map((entry) => entry.amount_minor)])
+}
+
+export function dashboardMetricCurrencies(
+  data: Pick<DashboardData, 'sessions' | 'accounts'>,
+): CurrencyCode[] {
+  const codes = new Set<CurrencyCode>([
+    ...data.sessions
+      .filter((session) => session.data_quality !== 'legacy_incomplete')
+      .map((session) => session.currency),
+    ...data.accounts
+      .filter((account) => !account.is_archived)
+      .map((account) => account.currency),
+  ])
+  return codes.size ? Array.from(codes).sort() : ['USD']
+}
+
+export function calculateTripSpend(
+  expenses: Array<Pick<CareerExpense, 'trip_id' | 'amount_minor' | 'currency'>>,
+  tripId: string,
+  currency: string,
+): { amountMinor: string; excludedCurrencyCount: number } {
+  const tripCurrency = normalizeCurrency(currency)
+  const linkedExpenses = expenses.filter((expense) => expense.trip_id === tripId)
+  const matchingExpenses = linkedExpenses.filter((expense) => expense.currency === tripCurrency)
+  return {
+    amountMinor: sumMinor(matchingExpenses.map((expense) => expense.amount_minor)),
+    excludedCurrencyCount: linkedExpenses.length - matchingExpenses.length,
+  }
 }
 
 export function calculateCareerMetrics(data: DashboardData, currency = 'USD'): CareerMetrics {
@@ -621,14 +701,17 @@ export async function listCareerSessions(
   limit = 250,
 ): Promise<CareerSession[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('career_sessions')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('played_at', { ascending: false })
-    .limit(limit)
-  throwIfError(error)
-  return (data ?? []).map(normalizeCareerSessionRow)
+  const rows = await collectQueryPages(
+    (from, to) =>
+      supabase
+        .from('career_sessions')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .order('played_at', { ascending: false })
+        .range(from, to),
+    limit,
+  )
+  return rows.map(normalizeCareerSessionRow)
 }
 
 export async function createCareerSession(
@@ -657,14 +740,16 @@ export async function createCareerSession(
 
 export async function listBankrollAccounts(ownerId: string): Promise<BankrollAccount[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('bankroll_accounts')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('is_archived')
-    .order('name')
-  throwIfError(error)
-  return (data ?? []).map(normalizeBankrollAccountRow)
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('bankroll_accounts')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('is_archived')
+      .order('name')
+      .range(from, to),
+  )
+  return rows.map(normalizeBankrollAccountRow)
 }
 
 export async function createBankrollAccount(
@@ -688,14 +773,17 @@ export async function createBankrollAccount(
 
 export async function listLedgerEntries(ownerId: string, limit = 500): Promise<LedgerEntry[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('bankroll_ledger_entries')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('occurred_at', { ascending: false })
-    .limit(limit)
-  throwIfError(error)
-  return (data ?? []).map(normalizeLedgerEntryRow)
+  const rows = await collectQueryPages(
+    (from, to) =>
+      supabase
+        .from('bankroll_ledger_entries')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .order('occurred_at', { ascending: false })
+        .range(from, to),
+    limit,
+  )
+  return rows.map(normalizeLedgerEntryRow)
 }
 
 export async function postLedgerEntry(
@@ -733,7 +821,7 @@ export async function reverseLedgerEntry(
   ownerId: string,
   entryId: string,
   reason: string,
-  idempotencyKey = crypto.randomUUID(),
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<LedgerEntry> {
   assertOwnerId(ownerId)
   const { data, error } = await supabase.rpc('reverse_ledger_entry', {
@@ -748,13 +836,15 @@ export async function reverseLedgerEntry(
 
 export async function listSettlements(ownerId: string): Promise<Settlement[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('settlements')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('created_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map(normalizeSettlementRow)
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('settlements')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map(normalizeSettlementRow)
 }
 
 export async function createSettlement(
@@ -784,28 +874,37 @@ export async function updateSettlementStatus(
   ownerId: string,
   settlementId: string,
   status: SettlementStatus,
-): Promise<void> {
+  expectedRevision: number,
+  idempotencyKey: string,
+): Promise<Settlement> {
   assertOwnerId(ownerId)
-  const { error } = await supabase
-    .from('settlements')
-    .update({
-      status,
-      paid_at: status === 'paid' ? new Date().toISOString() : null,
-    })
-    .eq('owner_id', ownerId)
-    .eq('id', settlementId)
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    throw new Error('Settlement revision is invalid. Refresh and try again.')
+  }
+  if (!idempotencyKey.trim()) {
+    throw new Error('A settlement operation key is required.')
+  }
+  const { data, error } = await supabase.rpc('transition_settlement', {
+    p_settlement_id: settlementId,
+    p_new_status: status,
+    p_expected_revision: expectedRevision,
+    p_idempotency_key: idempotencyKey,
+  })
   throwIfError(error)
+  return normalizeSettlementRow(data)
 }
 
 export async function listTrips(ownerId: string): Promise<PokerTrip[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('poker_trips')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('starts_on', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('poker_trips')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('starts_on', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as PokerTrip
     return {
       ...value,
@@ -839,13 +938,15 @@ export async function createTrip(
 
 export async function listCareerExpenses(ownerId: string): Promise<CareerExpense[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('career_expenses')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('incurred_on', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('career_expenses')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('incurred_on', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as CareerExpense
     return {
       ...value,
@@ -883,50 +984,131 @@ export async function uploadExpenseReceipt(
   file: File,
 ): Promise<string> {
   assertOwnerId(ownerId)
+  if (file.size === 0) {
+    throw new Error('Receipt files cannot be empty.')
+  }
   if (file.size > 10 * 1024 * 1024) {
     throw new Error('Receipt files must be 10 MB or smaller.')
   }
-  const extension =
-    file.name.includes('.')
-      ? file.name.split('.').pop()?.replaceAll(/[^a-zA-Z0-9]/g, '')
-      : 'bin'
-  const path = `${ownerId}/expenses/${expenseId}/${crypto.randomUUID()}.${extension || 'bin'}`
+  const allowedReceiptTypes = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  } as const
+  const extension = allowedReceiptTypes[file.type as keyof typeof allowedReceiptTypes]
+  if (!extension) {
+    throw new Error('Use a PDF, JPEG, PNG, or WebP receipt file.')
+  }
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  const contentFingerprint = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+  const path = `${ownerId}/expenses/${expenseId}/${contentFingerprint}.${extension}`
   const { error: uploadError } = await supabase.storage
     .from('career-documents')
-    .upload(path, file, { contentType: file.type, upsert: false })
+    .upload(path, file, { contentType: file.type, upsert: true })
   throwIfError(uploadError)
-  const { error: updateError } = await supabase
-    .from('career_expenses')
-    .update({ receipt_path: path })
-    .eq('owner_id', ownerId)
-    .eq('id', expenseId)
-  throwIfError(updateError)
-  return path
+
+  const attachReceipt = () =>
+    supabase
+      .from('career_expenses')
+      .update({ receipt_path: path })
+      .eq('owner_id', ownerId)
+      .eq('id', expenseId)
+      .select('id')
+      .single()
+  let { error: updateError } = await attachReceipt()
+  if (updateError) {
+    const retry = await attachReceipt()
+    updateError = retry.error
+  }
+  if (!updateError) return path
+
+  const definitiveRejectionCodes = new Set(['22P02', '23503', '42501', 'PGRST116'])
+  if (definitiveRejectionCodes.has(updateError.code ?? '')) {
+    const { error: cleanupError } = await supabase.storage
+      .from('career-documents')
+      .remove([path])
+    if (cleanupError) {
+      throw new Error(
+        'The receipt could not be attached, and its uploaded file could not be cleaned up automatically.',
+      )
+    }
+    throwIfError(updateError)
+  }
+
+  throw new Error(
+    'The receipt was uploaded, but its attachment could not be verified. Retry the same file to finish safely.',
+  )
 }
 
 export async function uploadSettlementConfirmation(
   ownerId: string,
   settlementId: string,
+  expectedRevision: number,
   file: File,
+  idempotencyKey: string,
 ): Promise<string> {
   assertOwnerId(ownerId)
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    throw new Error('Settlement revision is invalid. Refresh and try again.')
+  }
+  if (file.size === 0) {
+    throw new Error('Confirmation files cannot be empty.')
+  }
   if (file.size > 10 * 1024 * 1024) {
     throw new Error('Confirmation files must be 10 MB or smaller.')
   }
-  const safeExtension =
-    file.name.includes('.') ? file.name.split('.').pop()?.replaceAll(/[^a-zA-Z0-9]/g, '') : 'bin'
-  const path = `${ownerId}/settlements/${settlementId}/${crypto.randomUUID()}.${safeExtension || 'bin'}`
+  const allowedConfirmationTypes = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  } as const
+  const extension =
+    allowedConfirmationTypes[file.type as keyof typeof allowedConfirmationTypes]
+  if (!extension) {
+    throw new Error('Use a PDF, JPEG, PNG, or WebP confirmation file.')
+  }
+  if (!idempotencyKey.trim()) {
+    throw new Error('A confirmation operation key is required.')
+  }
+  const path = `${ownerId}/settlements/${settlementId}/${idempotencyKey}.${extension}`
   const { error: uploadError } = await supabase.storage
     .from('career-documents')
-    .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
-  throwIfError(uploadError)
-  const { error: updateError } = await supabase
-    .from('settlements')
-    .update({ confirmation_path: path })
-    .eq('owner_id', ownerId)
-    .eq('id', settlementId)
-  throwIfError(updateError)
-  return path
+    .upload(path, file, { contentType: file.type, upsert: false })
+  const attachParams = {
+    p_settlement_id: settlementId,
+    p_confirmation_path: path,
+    p_expected_revision: expectedRevision,
+    p_idempotency_key: idempotencyKey,
+  }
+  let { error: attachError } = await supabase.rpc(
+    'attach_settlement_confirmation',
+    attachParams,
+  )
+  if (attachError) {
+    const replay = await supabase.rpc('attach_settlement_confirmation', attachParams)
+    attachError = replay.error
+  }
+  if (!attachError) return path
+
+  if (uploadError) {
+    throwIfError(uploadError)
+  }
+
+  const definitiveRejectionCodes = new Set(['22023', '42501', 'P0002'])
+  if (definitiveRejectionCodes.has(attachError.code ?? '')) {
+    const { error: cleanupError } = await supabase.storage.from('career-documents').remove([path])
+    if (!cleanupError) {
+      throwIfError(attachError)
+    }
+  }
+
+  throw new Error(
+    'The confirmation was uploaded, but its attachment could not be verified. Retry the same file; it will reuse the original operation safely.',
+  )
 }
 
 export async function getPrivateDocumentUrl(path: string): Promise<string> {
@@ -940,13 +1122,15 @@ export async function getPrivateDocumentUrl(path: string): Promise<string> {
 
 export async function listStakingDeals(ownerId: string): Promise<StakingDeal[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('staking_deals')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('starts_on', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('staking_deals')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('starts_on', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as StakingDeal
     return {
       ...value,
@@ -983,13 +1167,15 @@ export async function createStakingDeal(
 
 export async function listStakingAllocations(ownerId: string): Promise<StakingAllocation[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('staking_allocations')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('created_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('staking_allocations')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as StakingAllocation
     return {
       ...value,
@@ -1005,27 +1191,56 @@ export async function listStakingAllocations(ownerId: string): Promise<StakingAl
 
 export async function createStakingAllocation(
   ownerId: string,
-  input: Omit<StakingAllocation, 'id' | 'owner_id' | 'created_at'>,
-): Promise<StakingAllocation> {
+  input: {
+    deal_id: string
+    session_id: string
+    allocated_buy_in_minor: string
+    total_result_minor: string
+    expected_makeup_minor: string
+    notes?: string | null
+    idempotency_key: string
+  },
+): Promise<StakingAllocationResult> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('staking_allocations')
-    .insert({
-      ...input,
-      owner_id: ownerId,
-      allocated_buy_in_minor: normalizeMinor(input.allocated_buy_in_minor),
-      backer_result_minor: normalizeMinor(input.backer_result_minor),
-      player_result_minor: normalizeMinor(input.player_result_minor),
-    })
-    .select()
-    .single()
+  if (!input.idempotency_key.trim()) {
+    throw new Error('A staking allocation operation key is required.')
+  }
+  const { data, error } = await supabase.rpc('record_staking_allocation', {
+    p_owner_id: ownerId,
+    p_deal_id: input.deal_id,
+    p_session_id: input.session_id,
+    p_allocated_buy_in_minor: normalizeMinor(input.allocated_buy_in_minor),
+    p_total_result_minor: normalizeMinor(input.total_result_minor),
+    p_expected_makeup_minor: normalizeMinor(input.expected_makeup_minor),
+    p_notes: input.notes ?? null,
+    p_idempotency_key: input.idempotency_key,
+  })
   throwIfError(error)
-  const value = data as StakingAllocation
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('The staking allocation response was invalid.')
+  }
+  const result = data as unknown as StakingAllocationResult
+  const allocation = result.allocation
+  const deal = result.deal
+  if (!allocation?.id || !deal?.id) {
+    throw new Error('The staking allocation response was incomplete.')
+  }
   return {
-    ...value,
-    allocated_buy_in_minor: exactMinorValue(value.allocated_buy_in_minor, 'Staking allocation'),
-    backer_result_minor: exactMinorValue(value.backer_result_minor, 'Backer result'),
-    player_result_minor: exactMinorValue(value.player_result_minor, 'Player result'),
+    allocation: {
+      ...allocation,
+      allocated_buy_in_minor: exactMinorValue(
+        allocation.allocated_buy_in_minor,
+        'Staking allocation',
+      ),
+      backer_result_minor: exactMinorValue(allocation.backer_result_minor, 'Backer result'),
+      player_result_minor: exactMinorValue(allocation.player_result_minor, 'Player result'),
+    },
+    deal: {
+      ...deal,
+      makeup_minor: exactMinorValue(deal.makeup_minor, 'Staking makeup'),
+    },
+    makeup_before_minor: exactMinorValue(result.makeup_before_minor, 'Prior staking makeup'),
+    makeup_after_minor: exactMinorValue(result.makeup_after_minor, 'Updated staking makeup'),
   }
 }
 
@@ -1035,16 +1250,17 @@ export async function listProfessionalEvents(
   to?: string,
 ): Promise<ProfessionalCalendarEvent[]> {
   assertOwnerId(ownerId)
-  let query = supabase
-    .from('professional_calendar_events')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('starts_at')
-  if (from) query = query.gte('starts_at', from)
-  if (to) query = query.lte('starts_at', to)
-  const { data, error } = await query
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((pageFrom, pageTo) => {
+    let query = supabase
+      .from('professional_calendar_events')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('starts_at')
+    if (from) query = query.gte('starts_at', from)
+    if (to) query = query.lte('starts_at', to)
+    return query.range(pageFrom, pageTo)
+  })
+  return rows.map((row) => {
     const value = row as ProfessionalCalendarEvent
     return {
       ...value,
@@ -1078,13 +1294,15 @@ export async function createProfessionalEvent(
 
 export async function listPokerHands(ownerId: string): Promise<PokerHand[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('poker_hands')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('played_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('poker_hands')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('played_at', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as PokerHand
     return {
       ...value,
@@ -1135,13 +1353,14 @@ export async function updateHandReviewStatus(
 
 export async function listStudySessions(ownerId: string): Promise<StudySession[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('study_sessions')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('studied_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []) as StudySession[]
+  return collectQueryPages((from, to) =>
+    supabase
+      .from('study_sessions')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('studied_at', { ascending: false })
+      .range(from, to),
+  )
 }
 
 export async function createStudySession(
@@ -1160,13 +1379,15 @@ export async function createStudySession(
 
 export async function listCareerGoals(ownerId: string): Promise<CareerGoal[]> {
   assertOwnerId(ownerId)
-  const { data, error } = await supabase
-    .from('career_goals')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('created_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('career_goals')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as CareerGoal
     return {
       ...value,
@@ -1236,13 +1457,15 @@ export async function loadDashboardData(ownerId: string): Promise<DashboardData>
 export async function listPlaidCandidates(ownerId: string): Promise<PlaidCandidate[]> {
   assertOwnerId(ownerId)
   if (!PLAID_ENABLED) return []
-  const { data, error } = await supabase
-    .from('plaid_reconciliation_candidates')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('date', { ascending: false })
-  throwIfError(error)
-  return (data ?? []).map((row) => {
+  const rows = await collectQueryPages((from, to) =>
+    supabase
+      .from('plaid_reconciliation_candidates')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('date', { ascending: false })
+      .range(from, to),
+  )
+  return rows.map((row) => {
     const value = row as PlaidCandidate
     return {
       ...value,
@@ -1306,6 +1529,20 @@ export function rememberedPlaidConnection(ownerId: string): string | null {
   }
 }
 
+export function selectActivePlaidConnection(
+  connections: PlaidConnection[],
+  rememberedConnectionId: string | null,
+): string | null {
+  const activeConnections = connections.filter(
+    (connection) => connection.status === 'active',
+  )
+  return (
+    activeConnections.find((connection) => connection.id === rememberedConnectionId)?.id ??
+    activeConnections[0]?.id ??
+    null
+  )
+}
+
 export function forgetPlaidConnection(ownerId: string): void {
   if (typeof window === 'undefined') return
   if (rememberedPlaidConnection(ownerId) === null) return
@@ -1313,7 +1550,26 @@ export function forgetPlaidConnection(ownerId: string): void {
 }
 
 export function providerUrlForSettlement(settlement: Settlement): string | null {
-  if (settlement.provider_url) return settlement.provider_url
+  if (settlement.provider_url) {
+    try {
+      const url = new URL(settlement.provider_url)
+      const allowedHosts = new Set([
+        'venmo.com',
+        'www.venmo.com',
+        'paypal.com',
+        'www.paypal.com',
+        'paypal.me',
+        'www.paypal.me',
+        'cash.app',
+      ])
+      if (url.protocol === 'https:' && allowedHosts.has(url.hostname.toLowerCase())) {
+        return url.toString()
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
   const handle = settlement.external_handle?.trim()
   if (!handle) return null
   switch (settlement.external_method?.trim().toLowerCase()) {
@@ -1394,11 +1650,16 @@ export function exportFilename(subject: string, extension = 'csv'): string {
 
 export function formatDate(value: string | null): string {
   if (!value) return '—'
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const date = dateOnly
+    ? new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])))
+    : new Date(value)
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-  }).format(new Date(value))
+    ...(dateOnly ? { timeZone: 'UTC' } : {}),
+  }).format(date)
 }
 
 export function formatDateTime(value: string | null): string {

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { CircleNotch } from '@phosphor-icons/react'
 import { useAuthStore } from './store/authStore'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthLayout } from './components/layout/AuthLayout'
@@ -97,8 +98,8 @@ function LoadingScreen() {
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-center gap-3 text-lg font-semibold text-poker-green">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-poker-green border-t-transparent" />
+      <div className="flex items-center gap-3 text-base font-semibold text-felt">
+        <CircleNotch className="size-5 animate-spin" aria-hidden="true" />
         Loading Poker Manager…
       </div>
     </div>
@@ -126,6 +127,48 @@ function AnonymousOnlyLayout() {
   return user ? <Navigate to="/" replace /> : <AuthLayout />
 }
 
+const routeTitles: Array<[RegExp, string]> = [
+  [/^\/$/, 'Home'],
+  [/^\/login$/, 'Sign in'],
+  [/^\/signup$/, 'Create account'],
+  [/^\/i\/[^/]+$/, 'Game invitation'],
+  [/^\/leagues$/, 'Leagues'],
+  [/^\/games$/, 'Games'],
+  [/^\/leagues\/[^/]+\/games\/[^/]+$/, 'Game night'],
+  [/^\/leagues\/[^/]+\/players\/[^/]+$/, 'Player profile'],
+  [/^\/leagues\/[^/]+$/, 'League'],
+  [/^\/pro$/, 'Overview'],
+  [/^\/pro\/sessions$/, 'Sessions'],
+  [/^\/pro\/bankroll$/, 'Bankroll'],
+  [/^\/pro\/settlements$/, 'Settlements'],
+  [/^\/pro\/travel$/, 'Travel expenses'],
+  [/^\/pro\/staking$/, 'Staking'],
+  [/^\/pro\/calendar$/, 'Calendar'],
+  [/^\/pro\/study$/, 'Study'],
+  [/^\/pro\/exports$/, 'Reports'],
+  [/^\/pro\/reconciliation$/, 'Reconciliation'],
+]
+
+function RouteFocusManager() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const title =
+      routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] ?? 'PokerManager'
+    document.title = title === 'PokerManager' ? title : `${title} | PokerManager`
+
+    if (location.hash) return
+    const frame = requestAnimationFrame(() => {
+      const main = document.getElementById('main-content') ?? document.querySelector('main')
+      if (main instanceof HTMLElement) main.focus({ preventScroll: true })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [location.hash, location.pathname])
+
+  return null
+}
+
 function App() {
   const initialize = useAuthStore((state) => state.initialize)
 
@@ -135,6 +178,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <RouteFocusManager />
       <RouteLoading>
         <Routes>
           <Route path="/i/:token" element={<GuestInvitePage />} />

@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, Inbox, LoaderCircle, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
 
-export function ProLoading({ label = 'Loading your private poker data…' }: { label?: string }) {
+export function ProLoading({ label = 'Loading…' }: { label?: string }) {
   return (
-    <Card className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted" role="status">
+    <div
+      className="flex min-h-40 items-center justify-center gap-2 border border-rule bg-ivory text-sm text-muted"
+      role="status"
+    >
       <LoaderCircle className="h-5 w-5 animate-spin text-gold" aria-hidden="true" />
       {label}
-    </Card>
+    </div>
   )
 }
 export function ProError({
@@ -21,7 +23,7 @@ export function ProError({
   title?: string
 }) {
   return (
-    <Card className="border-danger/30 bg-danger/5" role="alert">
+    <div className="border-l-4 border-danger bg-danger/5 p-4" role="alert">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
         <div className="min-w-0 flex-1">
@@ -35,7 +37,7 @@ export function ProError({
           ) : null}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -49,13 +51,13 @@ export function ProEmpty({
   action?: ReactNode
 }) {
   return (
-    <Card className="flex min-h-44 flex-col items-center justify-center text-center">
+    <div className="flex min-h-44 flex-col items-center justify-center border border-rule bg-ivory p-5 text-center">
       <div className="mb-3 rounded-full bg-cream p-3 text-muted">
         <Inbox className="h-6 w-6" aria-hidden="true" />
       </div>
       <h2 className="font-semibold text-ink">{title}</h2>
       <p className="mt-1 max-w-md text-sm text-muted">{description}</p>
       {action ? <div className="mt-4">{action}</div> : null}
-    </Card>
+    </div>
   )
 }

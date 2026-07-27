@@ -971,6 +971,97 @@ export type Database = {
           },
         ]
       }
+      game_result_versions: {
+        Row: {
+          add_on_count: number
+          add_on_total_minor: number
+          bounty_minor: number
+          correction_of_id: string | null
+          created_at: string
+          created_by: string
+          currency: string
+          entry_minor: number
+          finish_position: number
+          game_id: string
+          id: string
+          idempotency_key: string
+          is_post_finalization: boolean
+          payout_minor: number
+          player_id: string
+          reentry_count: number
+          reentry_total_minor: number
+          total_buy_in_minor: number
+          transaction_ids: string[]
+          version: number
+        }
+        Insert: {
+          add_on_count?: number
+          add_on_total_minor?: number
+          bounty_minor?: number
+          correction_of_id?: string | null
+          created_at?: string
+          created_by: string
+          currency: string
+          entry_minor: number
+          finish_position: number
+          game_id: string
+          id?: string
+          idempotency_key: string
+          is_post_finalization?: boolean
+          payout_minor?: number
+          player_id: string
+          reentry_count?: number
+          reentry_total_minor?: number
+          total_buy_in_minor?: number
+          transaction_ids?: string[]
+          version: number
+        }
+        Update: {
+          add_on_count?: number
+          add_on_total_minor?: number
+          bounty_minor?: number
+          correction_of_id?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string
+          entry_minor?: number
+          finish_position?: number
+          game_id?: string
+          id?: string
+          idempotency_key?: string
+          is_post_finalization?: boolean
+          payout_minor?: number
+          player_id?: string
+          reentry_count?: number
+          reentry_total_minor?: number
+          total_buy_in_minor?: number
+          transaction_ids?: string[]
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_result_versions_correction_of_id_fkey"
+            columns: ["correction_of_id"]
+            isOneToOne: true
+            referencedRelation: "game_result_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_result_versions_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_result_versions_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_seats: {
         Row: {
           active: boolean
@@ -2079,6 +2170,7 @@ export type Database = {
           provider_url: string | null
           reason: string
           recipient_contact_id: string | null
+          revision: number
           session_id: string | null
           status: Database["public"]["Enums"]["settlement_status"]
           updated_at: string
@@ -2103,6 +2195,7 @@ export type Database = {
           provider_url?: string | null
           reason: string
           recipient_contact_id?: string | null
+          revision?: number
           session_id?: string | null
           status?: Database["public"]["Enums"]["settlement_status"]
           updated_at?: string
@@ -2127,6 +2220,7 @@ export type Database = {
           provider_url?: string | null
           reason?: string
           recipient_contact_id?: string | null
+          revision?: number
           session_id?: string | null
           status?: Database["public"]["Enums"]["settlement_status"]
           updated_at?: string
@@ -2517,6 +2611,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_game_payouts: {
+        Args: {
+          p_game_id: string
+          p_rules: Json
+        }
+        Returns: {
+          amount_minor: number
+          finish_position: number
+        }[]
+      }
+      attach_settlement_confirmation: {
+        Args: {
+          p_confirmation_path: string
+          p_expected_revision: number
+          p_idempotency_key: string
+          p_settlement_id: string
+        }
+        Returns: Database["public"]["Tables"]["settlements"]["Row"]
+      }
       claim_email_queue: {
         Args: { p_limit: number }
         Returns: {
@@ -2547,6 +2660,15 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      command_tournament_clock: {
+        Args: {
+          p_command: string
+          p_expected_revision: number
+          p_game_id: string
+          p_idempotency_key: string
+        }
+        Returns: Database["public"]["Tables"]["tournament_clocks"]["Row"]
       }
       create_game_from_template: {
         Args: {
@@ -2660,6 +2782,7 @@ export type Database = {
           provider_url: string | null
           reason: string
           recipient_contact_id: string | null
+          revision: number
           session_id: string | null
           status: Database["public"]["Enums"]["settlement_status"]
           updated_at: string
@@ -2670,6 +2793,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      delete_league: {
+        Args: {
+          p_confirmation_name: string
+          p_idempotency_key: string
+          p_league_id: string
+        }
+        Returns: Json
       }
       finalize_game: {
         Args: { p_game_id: string; p_idempotency_key: string }
@@ -2810,6 +2941,37 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_game_result: {
+        Args: {
+          p_add_on_count: number
+          p_add_on_total_minor: number
+          p_bounty_minor: number
+          p_corrects_version_id: string
+          p_currency: string
+          p_entry_minor: number
+          p_finish_position: number
+          p_game_id: string
+          p_idempotency_key: string
+          p_payout_minor: number
+          p_player_id: string
+          p_reentry_count: number
+          p_reentry_total_minor: number
+        }
+        Returns: Database["public"]["Tables"]["game_result_versions"]["Row"]
+      }
+      record_staking_allocation: {
+        Args: {
+          p_allocated_buy_in_minor: number
+          p_deal_id: string
+          p_expected_makeup_minor: number
+          p_idempotency_key: string
+          p_notes: string
+          p_owner_id: string
+          p_session_id: string
+          p_total_result_minor: number
+        }
+        Returns: Json
+      }
       respond_to_guest_invitation: {
         Args: {
           p_guest_count: number
@@ -2848,6 +3010,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      reverse_game_transaction: {
+        Args: {
+          p_game_id: string
+          p_idempotency_key: string
+          p_note: string
+          p_transaction_id: string
+        }
+        Returns: Database["public"]["Tables"]["game_transactions"]["Row"]
       }
       set_active_season: {
         Args: { p_league_id: string; p_season_id: string }
@@ -2896,6 +3067,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      transition_settlement: {
+        Args: {
+          p_expected_revision: number
+          p_idempotency_key: string
+          p_new_status: Database["public"]["Enums"]["settlement_status"]
+          p_settlement_id: string
+        }
+        Returns: Database["public"]["Tables"]["settlements"]["Row"]
       }
     }
     Enums: {

@@ -23,6 +23,7 @@ import {
   PLAID_ENABLED,
   rememberedPlaidConnection,
   rememberPlaidConnection,
+  selectActivePlaidConnection,
   updatePlaidCandidate,
   type PlaidConnection,
   type PlaidCandidate,
@@ -67,6 +68,9 @@ export function ReconciliationPage() {
   const [working, setWorking] = useState(false)
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const [selectedLedger, setSelectedLedger] = useState<Record<string, string>>({})
+  const [candidateMutations, setCandidateMutations] = useState<Record<string, 'matched' | 'ignored'>>({})
+  const [candidateErrors, setCandidateErrors] = useState<Record<string, string>>({})
+  const candidateMutationLocks = useRef(new Set<string>())
   const shouldOpen = useRef(false)
   const reload = resource.reload
 
@@ -117,11 +121,22 @@ export function ReconciliationPage() {
     }
   }, [linkToken, open, ready])
 
-  const connectionId = PLAID_ENABLED && ownerId ? rememberedPlaidConnection(ownerId) : null
+  const rememberedConnectionId =
+    PLAID_ENABLED && ownerId ? rememberedPlaidConnection(ownerId) : null
+  const connectionId = selectActivePlaidConnection(
+    resource.data?.status?.connections ?? [],
+    rememberedConnectionId,
+  )
+  useEffect(() => {
+    if (ownerId && connectionId && connectionId !== rememberedConnectionId) {
+      rememberPlaidConnection(ownerId, connectionId)
+    }
+  }, [connectionId, ownerId, rememberedConnectionId])
   const candidates = useMemo(
     () => (resource.data?.candidates ?? []).filter((item) => !item.removed_at),
     [resource.data?.candidates],
   )
+  const hasCandidateMutation = Object.keys(candidateMutations).length > 0
 
   const connect = async () => {
     setWorking(true)
@@ -175,23 +190,45 @@ export function ReconciliationPage() {
     candidateId: string,
     status: 'matched' | 'ignored',
   ) => {
-    if (!ownerId) return
+    if (!ownerId || candidateMutationLocks.current.has(candidateId)) return
     const ledgerId = status === 'matched' ? selectedLedger[candidateId] : null
     if (status === 'matched' && !ledgerId) {
-      setFeedback({ error: 'Choose an existing ledger entry to confirm a match.' })
+      setFeedback({})
+      setCandidateErrors((values) => ({
+        ...values,
+        [candidateId]: 'Choose an existing ledger entry to confirm a match.',
+      }))
       return
     }
+    candidateMutationLocks.current.add(candidateId)
+    setCandidateMutations((values) => ({ ...values, [candidateId]: status }))
+    setCandidateErrors((values) => {
+      const next = { ...values }
+      delete next[candidateId]
+      return next
+    })
+    setFeedback({})
     try {
       await updatePlaidCandidate(ownerId, candidateId, status, ledgerId)
+      await resource.reload()
       setFeedback({
         success:
           status === 'matched'
             ? 'Candidate matched to the selected ledger entry.'
             : 'Candidate ignored. The bankroll ledger was not changed.',
       })
-      await resource.reload()
     } catch (error) {
-      setFeedback({ error: error instanceof Error ? error.message : 'Could not update candidate.' })
+      setCandidateErrors((values) => ({
+        ...values,
+        [candidateId]: error instanceof Error ? error.message : 'Could not update candidate.',
+      }))
+    } finally {
+      candidateMutationLocks.current.delete(candidateId)
+      setCandidateMutations((values) => {
+        const next = { ...values }
+        delete next[candidateId]
+        return next
+      })
     }
   }
 
@@ -199,7 +236,7 @@ export function ReconciliationPage() {
     return (
       <ProPage
         title="Bank reconciliation"
-        description="Optional read-only bank matching is off until the client explicitly enables Plaid."
+        description="Read-only bank matching is disabled."
       >
         <Card className="border-gold/30 bg-gold/5">
           <div className="flex items-start gap-3">
@@ -220,14 +257,19 @@ export function ReconciliationPage() {
   return (
     <ProPage
       title="Bank reconciliation"
-      description="Use read-only Plaid Transactions candidates to confirm records already posted to the bankroll ledger."
+      description="Match read-only bank activity to posted ledger entries."
       actions={
         <>
-          <Button size="sm" className="gap-2 bg-white text-poker-green hover:bg-cream" disabled={working} onClick={() => void sync()}>
+          <Button
+            size="md"
+            className="gap-2"
+            disabled={working || hasCandidateMutation || !connectionId}
+            onClick={() => void sync()}
+          >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Sync
           </Button>
-          <Button size="sm" className="gap-2 bg-white text-poker-green hover:bg-cream" disabled={working || Boolean(plaidScriptError)} onClick={() => void connect()}>
+          <Button size="md" className="gap-2" disabled={working || hasCandidateMutation || Boolean(plaidScriptError)} onClick={() => void connect()}>
             <Link2 className="h-4 w-4" aria-hidden="true" />
             Connect
           </Button>
@@ -251,7 +293,7 @@ export function ReconciliationPage() {
               </div>
             </div>
             {connectionId ? (
-              <Button size="sm" variant="ghost" className="gap-1.5" disabled={working} onClick={() => void disconnect()}>
+              <Button size="sm" variant="ghost" className="gap-1.5" disabled={working || hasCandidateMutation} onClick={() => void disconnect()}>
                 <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
                 Disconnect
               </Button>
@@ -270,45 +312,59 @@ export function ReconciliationPage() {
         <CardContent>
           {candidates.length ? (
             <div className="divide-y divide-border">
-              {candidates.map((candidate) => (
-                <article className="grid gap-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[1fr_auto] lg:items-center" key={candidate.id}>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-semibold text-ink">{candidate.name}</h2>
-                      <Badge variant={candidate.pending ? 'gold' : candidate.match_status === 'matched' ? 'green' : 'default'}>
-                        {candidate.pending ? 'pending bank item' : candidate.match_status}
-                      </Badge>
+              {candidates.map((candidate) => {
+                const mutation = candidateMutations[candidate.id]
+                const disabled = working || Boolean(mutation)
+                return (
+                  <article
+                    aria-busy={Boolean(mutation)}
+                    className="grid gap-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[1fr_auto] lg:items-center"
+                    key={candidate.id}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-semibold text-ink">{candidate.name}</h2>
+                        <Badge variant={candidate.pending ? 'gold' : candidate.match_status === 'matched' ? 'green' : 'default'}>
+                          {candidate.pending ? 'pending bank item' : candidate.match_status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted">{formatDate(candidate.date)} · Account ending/reference {candidate.account_id.slice(-4)}</p>
+                      <p className="mt-1 font-bold tabular-nums text-ink">{formatMinor(candidate.amount_minor, candidate.currency)}</p>
                     </div>
-                    <p className="mt-1 text-xs text-muted">{formatDate(candidate.date)} · Account ending/reference {candidate.account_id.slice(-4)}</p>
-                    <p className="mt-1 font-bold tabular-nums text-ink">{formatMinor(candidate.amount_minor, candidate.currency)}</p>
-                  </div>
-                  {candidate.match_status === 'unreviewed' ? (
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <FormSelect
-                        aria-label={`Ledger match for ${candidate.name}`}
-                        value={selectedLedger[candidate.id] ?? ''}
-                        onChange={(event) =>
-                          setSelectedLedger((values) => ({
-                            ...values,
-                            [candidate.id]: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">Choose ledger entry</option>
-                        {(resource.data?.ledger ?? [])
-                          .filter((entry) => entry.currency === candidate.currency)
-                          .map((entry) => (
-                            <option key={entry.id} value={entry.id}>
-                              {formatDate(entry.occurred_at)} · {entry.description} · {formatMinor(entry.amount_minor, entry.currency)}
-                            </option>
-                          ))}
-                      </FormSelect>
-                      <Button size="sm" onClick={() => void markCandidate(candidate.id, 'matched')}>Confirm match</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void markCandidate(candidate.id, 'ignored')}>Ignore</Button>
-                    </div>
-                  ) : null}
-                </article>
-              ))}
+                    {candidate.match_status === 'unreviewed' ? (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <FormSelect
+                          aria-label={`Ledger match for ${candidate.name}`}
+                          disabled={disabled}
+                          value={selectedLedger[candidate.id] ?? ''}
+                          onChange={(event) =>
+                            setSelectedLedger((values) => ({
+                              ...values,
+                              [candidate.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Choose ledger entry</option>
+                          {(resource.data?.ledger ?? [])
+                            .filter((entry) => entry.currency === candidate.currency)
+                            .map((entry) => (
+                              <option key={entry.id} value={entry.id}>
+                                {formatDate(entry.occurred_at)} · {entry.description} · {formatMinor(entry.amount_minor, entry.currency)}
+                              </option>
+                            ))}
+                        </FormSelect>
+                        <Button size="sm" disabled={disabled} onClick={() => void markCandidate(candidate.id, 'matched')}>
+                          {mutation === 'matched' ? 'Matching…' : 'Confirm match'}
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={disabled} onClick={() => void markCandidate(candidate.id, 'ignored')}>
+                          {mutation === 'ignored' ? 'Ignoring…' : 'Ignore'}
+                        </Button>
+                        {candidateErrors[candidate.id] ? <p className="text-sm text-red-700 sm:basis-full" role="alert">{candidateErrors[candidate.id]}</p> : null}
+                      </div>
+                    ) : null}
+                  </article>
+                )
+              })}
             </div>
           ) : (
             <ProEmpty

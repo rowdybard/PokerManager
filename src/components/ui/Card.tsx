@@ -1,14 +1,14 @@
 import { cn } from '../../lib/utils'
-import type { HTMLAttributes } from 'react'
+import type { ElementType, HTMLAttributes } from 'react'
 
-interface CardProps extends HTMLAttributes<HTMLDivElement> {}
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {}
 
 export function Card({ className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card p-5 shadow-sm',
-        className
+        'rounded border border-rule bg-card p-5',
+        className,
       )}
       {...props}
     />
@@ -21,9 +21,18 @@ export function CardHeader({ className, ...props }: CardProps) {
   )
 }
 
-export function CardTitle({ className, ...props }: CardProps) {
+export function CardTitle({
+  as: Component = 'h2',
+  className,
+  ...props
+}: HTMLAttributes<HTMLHeadingElement> & {
+  as?: Extract<ElementType, 'h1' | 'h2' | 'h3' | 'h4'>
+}) {
   return (
-    <h3 className={cn('text-lg font-semibold text-ink', className)} {...props} />
+    <Component
+      className={cn('font-serif text-xl font-semibold leading-tight text-ink', className)}
+      {...props}
+    />
   )
 }
 

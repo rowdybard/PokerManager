@@ -137,11 +137,11 @@ export function CareerSessionsPage() {
   return (
     <ProPage
       title="Sessions"
-      description="Capture live and online cash games or tournaments with enough detail for reliable analysis."
+      description="Record live and online cash games or tournaments."
       actions={
         <Button
-          size="sm"
-          className="gap-2 bg-white text-poker-green hover:bg-cream"
+          size="md"
+          className="gap-2"
           onClick={() => setShowForm((visible) => !visible)}
         >
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}

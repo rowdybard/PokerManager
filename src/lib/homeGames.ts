@@ -1,7 +1,7 @@
 import type { PostgrestError } from '@supabase/supabase-js'
 import { formatMoney, money } from './money'
-import { calculatePoints } from './points'
 import { supabase } from './supabase'
+import type { GameResultVersion } from './transactionalSafety'
 import type {
   Game,
   GameInvite,
@@ -131,6 +131,8 @@ export interface TournamentClockState {
   remaining_seconds: number
   is_running: boolean
   started_at: string | null
+  paused_at: string | null
+  revision: string
   updated_at: string | null
 }
 
@@ -140,6 +142,7 @@ export interface GameWorkspace {
   access: LeagueAccess
   players: Player[]
   results: GameResult[]
+  resultVersions: GameResultVersion[]
   invites: GameInvite[]
   participants: HomeParticipant[]
   transactions: GameTransaction[]
@@ -313,17 +316,6 @@ export interface UpdateGameTemplateInput {
   payoutRules?: Json
   reminderSchedule?: Json
   structureId?: string | null
-}
-
-export interface SaveResultInput {
-  id?: string
-  gameId: string
-  playerId: string
-  finishPosition: number
-  initialBuyIn: number
-  payout: number
-  rebuys: number
-  rebuyAmount: number
 }
 
 export interface RecordTransactionInput {
@@ -608,14 +600,6 @@ export function getGameCategory(game: HomeGame, now = new Date()): 'live' | 'upc
   if (game.phase === 'finalized') return 'past'
   const date = new Date(game.scheduled_date)
   return !Number.isNaN(date.getTime()) && date.getTime() < now.getTime() ? 'past' : 'upcoming'
-}
-
-export function resultInvestment(result: GameResult, gameBuyIn: number): number {
-  return Number(result.buy_in_amount) + Math.max(0, Number(result.rebuys)) * gameBuyIn
-}
-
-export function resultNet(result: GameResult, gameBuyIn: number): number {
-  return Number(result.payout) - resultInvestment(result, gameBuyIn)
 }
 
 export function summarizeCloseout(transactions: GameTransaction[]): CloseoutSummary {
@@ -1274,7 +1258,7 @@ export async function loadStandingsForSeason(
 ): Promise<StandingEntry[]> {
   const { data: gameRows, error: gameError } = await db
     .from('games')
-    .select('id, buy_in')
+    .select('id, currency')
     .eq('season_id', seasonId)
     .eq('status', 'completed')
   throwIfError(gameError)
@@ -1282,10 +1266,10 @@ export async function loadStandingsForSeason(
   const gameIds = (gameRows ?? []).map((game: { id: string }) => game.id)
   if (gameIds.length === 0) return []
 
-  const buyInByGame = new Map<string, number>(
-    (gameRows ?? []).map((game: { id: string; buy_in: number }) => [
+  const currencyByGame = new Map<string, string>(
+    (gameRows ?? []).map((game: { id: string; currency: string }) => [
       game.id,
-      Number(game.buy_in),
+      String(game.currency),
     ])
   )
   const { data, error } = await db
@@ -1302,8 +1286,9 @@ export async function loadStandingsForSeason(
       avatarUrl: player.avatar_url,
       totalPoints: 0,
       gamesPlayed: 0,
-      totalWinnings: 0,
-      netProfit: 0,
+      totalWinningsMinor: '0',
+      netProfitMinor: '0',
+      currency: null,
       wins: 0,
       rank: 0,
     })
@@ -1312,11 +1297,36 @@ export async function loadStandingsForSeason(
   for (const result of (data ?? []) as GameResult[]) {
     const entry = playerMap.get(result.player_id)
     if (!entry) continue
-    const gameBuyIn = buyInByGame.get(result.game_id) ?? Number(result.buy_in_amount)
     entry.totalPoints += Number(result.points_earned)
     entry.gamesPlayed += 1
-    entry.totalWinnings += Number(result.payout)
-    entry.netProfit += resultNet(result, gameBuyIn)
+    const currency = currencyByGame.get(result.game_id)
+    const financialsAvailable =
+      result.data_quality === 'trusted'
+      && result.total_buy_in_minor !== null
+      && result.total_buy_in_minor !== undefined
+      && result.payout_minor !== null
+      && result.payout_minor !== undefined
+      && Boolean(currency)
+    if (
+      !financialsAvailable
+      || (entry.currency !== null && entry.currency !== currency)
+      || entry.totalWinningsMinor === null
+      || entry.netProfitMinor === null
+    ) {
+      entry.totalWinningsMinor = null
+      entry.netProfitMinor = null
+      entry.currency = null
+    } else {
+      entry.currency = currency ?? null
+      entry.totalWinningsMinor = (
+        BigInt(entry.totalWinningsMinor) + BigInt(result.payout_minor!)
+      ).toString()
+      entry.netProfitMinor = (
+        BigInt(entry.netProfitMinor)
+        + BigInt(result.payout_minor!)
+        - BigInt(result.total_buy_in_minor!)
+      ).toString()
+    }
     if (result.finish_position === 1) entry.wins += 1
   }
 
@@ -1326,7 +1336,17 @@ export async function loadStandingsForSeason(
       (left, right) =>
         right.totalPoints - left.totalPoints ||
         right.wins - left.wins ||
-        right.netProfit - left.netProfit
+        (
+          right.netProfitMinor === null
+            ? -1
+            : left.netProfitMinor === null
+              ? 1
+              : BigInt(right.netProfitMinor) > BigInt(left.netProfitMinor)
+                ? 1
+                : BigInt(right.netProfitMinor) < BigInt(left.netProfitMinor)
+                  ? -1
+                  : 0
+        )
     )
   sorted.forEach((entry, index) => {
     entry.rank = index + 1
@@ -1390,6 +1410,7 @@ export async function loadGameWorkspace(
     seatRows,
     blindRows,
     clockRows,
+    resultVersionRows,
   ] = await Promise.all([
     db.from('games').select('*').eq('id', gameId).single(),
     db.from('leagues').select('*').eq('id', leagueId).single(),
@@ -1406,6 +1427,7 @@ export async function loadGameWorkspace(
     loadOptionalRows('game_seats', gameId, 'table_number'),
     loadOptionalRows('tournament_levels', gameId, 'level_number'),
     loadOptionalRows('tournament_clocks', gameId),
+    loadOptionalRows('game_result_versions', gameId, 'version'),
   ])
 
   throwIfError(gameResponse.error)
@@ -1430,6 +1452,30 @@ export async function loadGameWorkspace(
     access,
     players,
     results: (resultResponse.data ?? []) as GameResult[],
+    resultVersions: resultVersionRows.map((row) => ({
+      id: String(row.id),
+      game_id: String(row.game_id),
+      player_id: String(row.player_id),
+      version: Number(row.version),
+      correction_of_id: stringOrNull(row.correction_of_id),
+      finish_position: Number(row.finish_position),
+      entry_minor: String(row.entry_minor ?? '0'),
+      reentry_count: Number(row.reentry_count ?? 0),
+      reentry_total_minor: String(row.reentry_total_minor ?? '0'),
+      add_on_count: Number(row.add_on_count ?? 0),
+      add_on_total_minor: String(row.add_on_total_minor ?? '0'),
+      bounty_minor: String(row.bounty_minor ?? '0'),
+      payout_minor: String(row.payout_minor ?? '0'),
+      total_buy_in_minor: String(row.total_buy_in_minor ?? '0'),
+      currency: String(row.currency ?? 'USD'),
+      transaction_ids: Array.isArray(row.transaction_ids)
+        ? row.transaction_ids.map(String)
+        : [],
+      is_post_finalization: Boolean(row.is_post_finalization),
+      idempotency_key: String(row.idempotency_key ?? ''),
+      created_by: String(row.created_by ?? ''),
+      created_at: String(row.created_at ?? ''),
+    })),
     invites,
     participants,
     transactions: transactionRows.map((row) => ({
@@ -1470,6 +1516,8 @@ export async function loadGameWorkspace(
           remaining_seconds: Number(clockRows[0].remaining_seconds ?? 1200),
           is_running: Boolean(clockRows[0].is_running),
           started_at: stringOrNull(clockRows[0].started_at),
+          paused_at: stringOrNull(clockRows[0].paused_at),
+          revision: String(clockRows[0].revision ?? '0'),
           updated_at: stringOrNull(clockRows[0].updated_at),
         }
       : null,
@@ -1582,77 +1630,6 @@ export async function transitionGamePhase(game: HomeGame, phase: GamePhase): Pro
     .single()
   throwIfError(error)
   return asHomeGame(data)
-}
-
-async function recalculateGamePoints(
-  gameId: string,
-  pointsSystem: PointsSystem
-): Promise<void> {
-  const { data, error } = await db
-    .from('game_results')
-    .select('*')
-    .eq('game_id', gameId)
-    .order('finish_position')
-  throwIfError(error)
-  const results = (data ?? []) as GameResult[]
-  const totalPlayers = results.length
-  await Promise.all(
-    results.map((result) =>
-      db
-        .from('game_results')
-        .update({
-          points_earned: calculatePoints(result.finish_position, totalPlayers, pointsSystem),
-        })
-        .eq('id', result.id)
-    )
-  )
-}
-
-export async function saveGameResult(
-  input: SaveResultInput,
-  pointsSystem: PointsSystem
-): Promise<void> {
-  if (input.finishPosition < 1) throw new Error('Finish position must be at least 1.')
-  if (input.initialBuyIn < 0 || input.payout < 0 || input.rebuys < 0 || input.rebuyAmount < 0) {
-    throw new Error('Money amounts and rebuys cannot be negative.')
-  }
-
-  const { data: existing, error: existingError } = await db
-    .from('game_results')
-    .select('id, player_id, finish_position')
-    .eq('game_id', input.gameId)
-  throwIfError(existingError)
-  const conflict = (existing ?? []).find(
-    (row: { id: string; player_id: string; finish_position: number }) =>
-      row.finish_position === input.finishPosition && row.id !== input.id
-  )
-  if (conflict) throw new Error(`Finish position ${input.finishPosition} is already assigned.`)
-
-  const payload = {
-    game_id: input.gameId,
-    player_id: input.playerId,
-    finish_position: input.finishPosition,
-    buy_in_amount: input.initialBuyIn,
-    payout: input.payout,
-    rebuys: input.rebuys,
-    points_earned: 0,
-  }
-  const query = input.id
-    ? db.from('game_results').update(payload).eq('id', input.id)
-    : db.from('game_results').insert(payload)
-  const { error } = await query
-  throwIfError(error)
-  await recalculateGamePoints(input.gameId, pointsSystem)
-}
-
-export async function deleteGameResult(
-  resultId: string,
-  gameId: string,
-  pointsSystem: PointsSystem
-): Promise<void> {
-  const { error } = await db.from('game_results').delete().eq('id', resultId)
-  throwIfError(error)
-  await recalculateGamePoints(gameId, pointsSystem)
 }
 
 export async function updateRsvp(
@@ -1820,14 +1797,6 @@ export async function recordTournamentFinish(input: {
   }
 }
 
-export async function saveClockState(state: TournamentClockState): Promise<void> {
-  const { error } = await db.from('tournament_clocks').upsert(state, {
-    onConflict: 'game_id',
-  })
-  if (error && isOptionalFeatureUnavailable(error)) return
-  throwIfError(error)
-}
-
 export async function finalizeGame(gameId: string, idempotencyKey: string): Promise<void> {
   const { error } = await db.rpc('finalize_game', {
     p_game_id: gameId,
@@ -1861,12 +1830,17 @@ export async function linkFinalizedGameToCareer(input: {
   throwIfError(existingError)
   if (existing) return 'existing'
 
-  const totalBuyInMinor =
-    result.total_buy_in_minor ??
-    String(Math.round(Number(result.buy_in_amount) * 100))
-  const payoutMinor =
-    result.payout_minor ??
-    String(Math.round(Number(result.payout) * 100))
+  if (
+    result.data_quality !== 'trusted'
+    || result.total_buy_in_minor === null
+    || result.total_buy_in_minor === undefined
+    || result.payout_minor === null
+    || result.payout_minor === undefined
+  ) {
+    throw new Error('This result needs trusted minor-unit totals before it can be linked.')
+  }
+  const totalBuyInMinor = result.total_buy_in_minor
+  const payoutMinor = result.payout_minor
   const stakes =
     workspace.game.kind === 'cash'
       ? [workspace.game.small_blind, workspace.game.big_blind]
